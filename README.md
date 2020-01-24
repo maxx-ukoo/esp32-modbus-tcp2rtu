@@ -1,8 +1,8 @@
-# RTU to TCP modbus gateway
-
+# ESP32 IOT Module
 
 ## Features
 * Ethernet support
+* Web UI for configuration based on React 16 with Bootstrap
 * TCP to RTU transparent mode
 
 ## Hardware
@@ -11,7 +11,7 @@ Tested on my [EtherESP board](http://www.maxx.net.ua/?p=484). This board fully c
 
 ## Status
 These functions tested:
-* Read input register
+* Modbus gateway - read input register, read holding registers
 
 # Build
 
@@ -22,15 +22,10 @@ idf.py build
 idf.py -p COMX flash
 ```
 
-
-# Documentation
-
-http://www.simplymodbus.ca/TCP.htm
-https://en.wikipedia.org/wiki/Modbus#Modbus_TCP_frame_format_(primarily_used_on_Ethernet_networks)
-
-# Tools
-
-[qmodmaster](https://sourceforge.net/projects/qmodmaster/)
-
+## Links
+[Setup webapp](https://www.valentinog.com/blog/babel/)
+[Bootstrap](https://www.turtle-techies.com/post/react-navbar-with-bootstrap-4/)
 [IEEE754 converter](https://www.h-schmidt.net/FloatConverter/IEEE754.html)
 
+
+Copyright (C) 2019 Maksym Krasovskyi
