@@ -204,6 +204,7 @@ static esp_err_t system_info_get_handler(httpd_req_t *req)
     cJSON_AddStringToObject(root, "version", app_desc->version);
     cJSON_AddStringToObject(root, "time", app_desc->time);
     cJSON_AddStringToObject(root, "idf_ver", app_desc->idf_ver);
+    cJSON_AddStringToObject(root, "uptime", esp_log_system_timestamp());
     const char *sys_info = cJSON_Print(root);
     httpd_resp_sendstr(req, sys_info);
     free((void *)sys_info);

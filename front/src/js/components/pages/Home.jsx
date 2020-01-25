@@ -12,7 +12,8 @@ class Home extends Component {
           cores: "",
           date: "",
           time: "",
-          idf_ver: ""
+          idf_ver: "",
+          uptime: ""
         }
     }
 
@@ -25,7 +26,8 @@ class Home extends Component {
             cores: res.data.cores,
             date: res.data.date,
             time: res.data.time,
-            idf_ver: res.data.idf_ver
+            idf_ver: res.data.idf_ver,
+            uptime: res.data.uptime
           });
       })
     }
@@ -39,6 +41,7 @@ class Home extends Component {
               <p><strong>Version:</strong> {state.version}</p>
               <p><strong>Build time:</strong> {state.date}-{state.time}</p>
               <p><strong>Idf version:</strong> {state.idf_ver}</p>
+              <p><strong>Uptime:</strong> {state.uptime}</p>
             </div>
         );
     }
