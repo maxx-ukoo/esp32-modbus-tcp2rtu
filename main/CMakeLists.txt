@@ -2,6 +2,7 @@ idf_component_register(SRCS "iot_module_main.c"
                             "ui/ui_server.c"
                             "config/config.c"
                             "modbus/modbus.c"
+                            "gpio/gpio.c"
                         INCLUDE_DIRS "."
                         EMBED_TXTFILES  "certs/cacert.pem"
                                         "certs/prvtkey.pem")
