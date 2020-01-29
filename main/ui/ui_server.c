@@ -8,6 +8,7 @@
 */
 #include "ui_server.h"
 #include "config/config.h"
+#include "gpio/gpio.h"
 #include <string.h>
 #include <fcntl.h>
 #include "esp_http_server.h"
@@ -160,6 +161,8 @@ static esp_err_t gpio_control_post_handler(httpd_req_t *req) {
     int cur_len = 0;
     char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
     int received = 0;
+    int status = -1;
+    
     if (total_len >= SCRATCH_BUFSIZE) {
         /* Respond with 500 Internal Server Error */
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content too long");
@@ -176,17 +179,26 @@ static esp_err_t gpio_control_post_handler(httpd_req_t *req) {
     }
     buf[total_len] = '\0';
 
-    cJSON *root = cJSON_Parse(buf);
+    cJSON *gpio = cJSON_Parse(buf);
+    status = gpioInitFromJson(gpio) > -1;
+    if (status == -1) {
+        // write config
 
-    //int enable = cJSON_GetObjectItem(root, "enable")->valueint;
-    //int speed = cJSON_GetObjectItem(root, "speed")->valueint;
+    }
 
-    ESP_LOGI(REST_TAG, "Modbus control: enable = %d, speed = %d", enable, speed);
-    writeModbusConfig(enable, speed);
+    //ESP_LOGI(REST_TAG, "Modbus control: enable = %d, speed = %d", enable, speed);
+    //writeModbusConfig(enable, speed);
 
-    cJSON_Delete(root);
-    httpd_resp_sendstr(req, "OK");
-    return ESP_OK;
+    cJSON_Delete(gpio);
+    if (status == -1) {
+        httpd_resp_sendstr(req, "OK");
+        return ESP_OK;
+    } else {
+        char resp[15];
+        sprintf(resp, "Pin error %d", status);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, resp);
+        return ESP_FAIL;
+    }
 }
 
 static esp_err_t modbus_control_post_handler(httpd_req_t *req)
