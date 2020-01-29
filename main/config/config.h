@@ -14,6 +14,7 @@
 
 cJSON * readConfig();
 void writeModbusConfig(bool enable, int speed);
+void writeGpioConfig(cJSON *gpio);
 
 #endif /* CONFIG_H */
 

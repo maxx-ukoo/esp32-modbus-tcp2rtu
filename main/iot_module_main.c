@@ -35,6 +35,8 @@
 
 #include "modbus/modbus.h"
 #include "ui/ui_server.h"
+#include "gpio/gpio.h"
+
 //#include <esp_https_server.h>
 
 static const char *TAG = "IOT DIN Module";
@@ -156,6 +158,9 @@ void components_start(void) {
     if (enable == 1) {
         ESP_ERROR_CHECK(modbus_start(cJSON_GetObjectItem(modbus, "speed")->valueint));
     }
+
+    cJSON *gpio = cJSON_GetObjectItem(config, "gpio");
+    gpioInitFromJson(gpio);
     cJSON_Delete(config);
 }
 

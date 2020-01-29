@@ -19,8 +19,9 @@
 #define GPIO_H
 
 int gpioInitFromJson(cJSON *gpio);
-cJSON * getGpioDefaultConfig();
-cJSON * getGpioCurrentConfig();
+cJSON * getGpioConfig();
+cJSON * getPinState(int pin);
+cJSON * setPinState(int pin, int state);
 
 #endif /* GPIO_H */
 

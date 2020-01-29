@@ -15,11 +15,15 @@
 #include "esp_system.h"
 #include "esp_ota_ops.h"
 #include "esp_image_format.h"
+
+#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #include "esp_log.h"
 #include "esp_vfs.h"
 #include "cJSON.h"
 
 static const char *REST_TAG = "IOT DIN Server";
+
+
 #define REST_CHECK(a, str, goto_tag, ...)                                              \
     do                                                                                 \
     {                                                                                  \
@@ -182,12 +186,9 @@ static esp_err_t gpio_control_post_handler(httpd_req_t *req) {
     cJSON *gpio = cJSON_Parse(buf);
     status = gpioInitFromJson(gpio) > -1;
     if (status == -1) {
-        // write config
-
+        ESP_LOGD(REST_TAG, "Writing gpio config");
+        writeGpioConfig(gpio);
     }
-
-    //ESP_LOGI(REST_TAG, "Modbus control: enable = %d, speed = %d", enable, speed);
-    //writeModbusConfig(enable, speed);
 
     cJSON_Delete(gpio);
     if (status == -1) {
@@ -199,6 +200,71 @@ static esp_err_t gpio_control_post_handler(httpd_req_t *req) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, resp);
         return ESP_FAIL;
     }
+}
+
+static esp_err_t gpio_control_state_get_handler(httpd_req_t *req) {
+
+    char*  buf;
+    size_t buf_len;
+    char param[32];
+
+    /* Read URL query string length and allocate memory for length + 1,
+     * extra byte for null termination */
+    buf_len = httpd_req_get_url_query_len(req) + 1;
+    if (buf_len > 1) {
+        buf = malloc(buf_len);
+        if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
+            ESP_LOGI(REST_TAG, "Found URL query => %s", buf);           
+            /* Get value of expected key from query string */
+            if (httpd_query_key_value(buf, "pin", param, sizeof(param)) == ESP_OK) {
+                ESP_LOGD(REST_TAG, "Found URL query parameter => query1=%s", param);
+            }
+        }
+        free(buf);
+    }
+    int pin = atoi(param);
+    ESP_LOGD(REST_TAG, "Get gpio state: pin = %d", pin);
+    cJSON *res =  getPinState(pin);
+    const char *resp_body = cJSON_Print(res);
+    httpd_resp_sendstr(req, resp_body);
+    free((void *)resp_body);
+    cJSON_Delete(res);
+    return ESP_OK;
+}
+
+static esp_err_t gpio_control_state_post_handler(httpd_req_t *req) {
+    int total_len = req->content_len;
+    int cur_len = 0;
+    char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
+    int received = 0;
+    
+    if (total_len >= SCRATCH_BUFSIZE) {
+        /* Respond with 500 Internal Server Error */
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content too long");
+        return ESP_FAIL;
+    }
+    while (cur_len < total_len) {
+        received = httpd_req_recv(req, buf + cur_len, total_len);
+        if (received <= 0) {
+            /* Respond with 500 Internal Server Error */
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to post control value");
+            return ESP_FAIL;
+        }
+        cur_len += received;
+    }
+    buf[total_len] = '\0';
+
+    cJSON *json_body = cJSON_Parse(buf);
+    int pin = cJSON_GetObjectItem(json_body, "pin")->valueint;
+    int state = cJSON_GetObjectItem(json_body, "state")->valueint;
+    ESP_LOGI(REST_TAG, "Update gpio state: pin = %d, state = %d", pin, state);
+    cJSON *res =  setPinState(pin, state);
+    const char *resp_body = cJSON_Print(res);
+    httpd_resp_sendstr(req, resp_body);
+    free((void *)resp_body);
+    cJSON_Delete(json_body);
+    cJSON_Delete(res);
+    return ESP_OK;
 }
 
 static esp_err_t modbus_control_post_handler(httpd_req_t *req)
@@ -407,6 +473,24 @@ httpd_handle_t ui_http_webserver_start(const char *base_path)
         .user_ctx = rest_context
     };
     httpd_register_uri_handler(server, &gpio_control_post_uri);
+
+    /* URI handler for control pin state */
+    httpd_uri_t gpio_control_state_post_uri = {
+        .uri = "/api/gpio/state",
+        .method = HTTP_POST,
+        .handler = gpio_control_state_post_handler,
+        .user_ctx = rest_context
+    };
+    httpd_register_uri_handler(server, &gpio_control_state_post_uri);
+
+    /* URI handler for control pin state */
+    httpd_uri_t gpio_control_state_get_uri = {
+        .uri = "/api/gpio/state",
+        .method = HTTP_GET,
+        .handler = gpio_control_state_get_handler,
+        .user_ctx = rest_context
+    };
+    httpd_register_uri_handler(server, &gpio_control_state_get_uri);
 
    /* URI handler for fetching system info */
     httpd_uri_t system_info_get_uri = {

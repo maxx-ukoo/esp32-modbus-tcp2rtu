@@ -54,7 +54,7 @@ cJSON * createDefaultConfig() {
     }
     cJSON *modbus = createModbusConfig(false, 9600);
     cJSON_AddItemToObject(config, "modbus", modbus);
-    cJSON *gpio = getGpioDefaultConfig();
+    cJSON *gpio = getGpioConfig();
     cJSON_AddItemToObject(config, "gpio", gpio);
     writeConfig(config);
     return config;
@@ -110,7 +110,12 @@ void writeModbusConfig(bool enable, int speed) {
     cJSON_Delete(config);
 }
 
-
+void writeGpioConfig(cJSON *gpio) {
+    cJSON *config = readConfig();
+    cJSON_ReplaceItemInObject(config,"gpio",gpio);
+    writeConfig(config);
+    cJSON_Delete(config);
+}
 
 
 
