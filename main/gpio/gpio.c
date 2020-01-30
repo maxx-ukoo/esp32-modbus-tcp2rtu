@@ -11,25 +11,23 @@
 
 static const char *GPIO_TAG = "GPIO Tag";
 
-static int gpioEnabled = 0;
-
 // {id, mode 0/1 (0 - input, 1 - output), pullup, pulldown, maxmode}
 static int gpioConfig[GPIO_NUMBER][5] = {
-    {2, 0, 0, 0, 1},
-    {4, 0, 0, 0, 1},
-    {5, 0, 0, 0, 1},
-    {12, 0, 0, 0, 1},
-    {13, 0, 0, 0, 1},
-    {14, 0, 0, 0, 1},
-    {15, 0, 0, 0, 1},
-    {18, 0, 0, 0, 1},
-    {23, 0, 0, 0, 1},
-    {32, 0, 0, 0, 1},
-    {33, 0, 0, 0, 1},
-    {34, 0, 0, 0, 0},
-    {35, 0, 0, 0, 0},
-    {36, 0, 0, 0, 0},
-    {39, 0, 0, 0, 0}
+    {2, -1, 0, 0, 1},
+    {4, -1, 0, 0, 1},
+    {5, -1, 0, 0, 1},
+    {12, -1, 0, 0, 1},
+    {13, -1, 0, 0, 1},
+    {14, -1, 0, 0, 1},
+    {15, -1, 0, 0, 1},
+    {18, -1, 0, 0, 1},
+    {23, -1, 0, 0, 1},
+    {32, -1, 0, 0, 1},
+    {33, -1, 0, 0, 1},
+    {34, -1, 0, 0, 0},
+    {35, -1, 0, 0, 0},
+    {36, -1, 0, 0, 0},
+    {39, -1, 0, 0, 0}
 };
 
 static xQueueHandle gpio_evt_queue = NULL;
@@ -76,23 +74,25 @@ static esp_err_t gpioInit() {
 
     for (int i = 0; i < GPIO_NUMBER; ++i) {
         gpio_isr_handler_remove(gpioConfig[i][ID]);
-        if (gpioConfig[i][MODE] == 0)
-            io_conf.intr_type = GPIO_INTR_ANYEDGE;
-        else
-            io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
-        if (gpioConfig[i][MODE] == 0)
-            io_conf.mode = GPIO_MODE_INPUT;
-        else
-            io_conf.mode = GPIO_MODE_OUTPUT;
+        if (gpioConfig[i][MODE] != -1) {
+            if (gpioConfig[i][MODE] == 0)
+                io_conf.intr_type = GPIO_INTR_ANYEDGE;
+            else
+                io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+            if (gpioConfig[i][MODE] == 0)
+                io_conf.mode = GPIO_MODE_INPUT;
+            else
+                io_conf.mode = GPIO_MODE_OUTPUT;
 
-        io_conf.pin_bit_mask = (1ULL<<gpioConfig[i][ID]);
-        io_conf.pull_down_en = gpioConfig[i][PULL_D];
-        io_conf.pull_up_en = gpioConfig[i][PULL_U];
-        gpio_config(&io_conf);
-        
-        //hook isr handler for specific gpio pin
+            io_conf.pin_bit_mask = (1ULL<<gpioConfig[i][ID]);
+            io_conf.pull_down_en = gpioConfig[i][PULL_D];
+            io_conf.pull_up_en = gpioConfig[i][PULL_U];
+            gpio_config(&io_conf);
+            
+            //hook isr handler for specific gpio pin
 
-        gpio_isr_handler_add(gpioConfig[i][ID], gpio_isr_handler, (void*) gpioConfig[i][ID]);
+            gpio_isr_handler_add(gpioConfig[i][ID], gpio_isr_handler, (void*) gpioConfig[i][ID]);
+        }
     }
     ESP_LOGD(GPIO_TAG, "All pins configured");
     return ESP_OK;
@@ -116,16 +116,12 @@ static bool configurePin(int id, int mode, int pull_up, int pull_down) {
     return true;
 }
 
-int gpioInitFromJson(cJSON *gpio) {
+int gpioInitFromJson(cJSON *pins) {
     const cJSON *pin = NULL;
-    const cJSON *pins = NULL;
     int status = -1;
     //ESP_LOGI(TAG, "Init gpio from JSON"Partition size: total: %d, used: %d", total, used");
 
     ESP_LOGD(GPIO_TAG, "Init gpio from JSON");
-    gpioEnabled = cJSON_GetObjectItem(gpio, "enable")->valueint;
-    ESP_LOGD(GPIO_TAG, "Init gpio from JSON, status %d", gpioEnabled);
-    pins = cJSON_GetObjectItemCaseSensitive(gpio, "config");
     cJSON_ArrayForEach(pin, pins)
     {
         int id = cJSON_GetObjectItemCaseSensitive(pin, "id")->valueint;
@@ -149,30 +145,16 @@ end:
 }
 
 cJSON * getGpioConfig() {
-    cJSON *gpio = cJSON_CreateObject();
-    cJSON *enable = NULL;
-    cJSON *config = NULL;
     cJSON *pin = NULL;
     cJSON *pin_item1 = NULL;
     cJSON *pin_item2 = NULL;
     cJSON *pin_item3 = NULL;
     cJSON *pin_item4 = NULL;
+    cJSON *gpio = cJSON_CreateArray();
     if (gpio == NULL)
     {
         goto end;
     }
-    enable = cJSON_CreateBool(gpioEnabled);
-    if (enable == NULL)
-    {
-        goto end;
-    }
-    cJSON_AddItemToObject(gpio, "enable", enable);
-    config = cJSON_CreateArray();
-    if (config == NULL)
-    {
-        goto end;
-    }
-    cJSON_AddItemToObject(gpio, "config", config);
     for (int i = 0; i < GPIO_NUMBER; ++i) {
         ESP_LOGE(GPIO_TAG, "Creating config for pin %d", gpioConfig[i][ID]);
         pin = cJSON_CreateObject();
@@ -180,7 +162,7 @@ cJSON * getGpioConfig() {
         {
             goto end;
         }
-        cJSON_AddItemToArray(config, pin);
+        cJSON_AddItemToArray(gpio, pin);
         pin_item1 = cJSON_CreateNumber(gpioConfig[i][ID]);
         if (pin_item1 == NULL)
         {

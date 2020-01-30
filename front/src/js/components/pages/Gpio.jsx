@@ -7,37 +7,32 @@ class Gpio  extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      enable: false,
       config: []
     }
     this.handleModeChange = this.handleModeChange.bind(this);
     this.handlePullUpChange = this.handlePullUpChange.bind(this);
     this.handlePullDownChange = this.handlePullDownChange.bind(this);
     this.handleApplyChanges = this.handleApplyChanges.bind(this);
-    this.handleGpioEnable = this.handleGpioEnable.bind(this);
+    this.handleStateChange = this.handleStateChange.bind(this);
   }
 
   componentDidMount() {
     axios.get('/config.json')
     .then(res => {
       this.setState({
-        enable: res.data.gpio.enable,
-        config: res.data.gpio.config
+        config: res.data.gpio
       });
       console.log(res.data);
     })
   }
 
-  handleGpioEnable(e) {
-    this.setState({enable: e.target.checked});
-  }
-
   handleModeChange(e) {
     let id = e.target.id.replace("sw", "");
     let idx = this.state.config.findIndex(item => item.id == id)
+    console.log(id + " => " + e.target.value);
     if (idx > -1 ) {
       let arr = this.state.config;
-      (arr[idx])['mode'] = e.target.checked;
+      (arr[idx])['mode'] = Number(e.target.value);
       this.setState({
         config: arr
       })
@@ -49,7 +44,7 @@ class Gpio  extends Component {
     let idx = this.state.config.findIndex(item => item.id == id)
     if (idx > -1 ) {
       let arr = this.state.config;
-      (arr[idx])['pull_up'] = e.target.checked;
+      (arr[idx])['pull_up'] = Number(e.target.checked);
       this.setState({
         config: arr
       })
@@ -61,16 +56,26 @@ class Gpio  extends Component {
     let idx = this.state.config.findIndex(item => item.id == id)
     if (idx > -1 ) {
       let arr = this.state.config;
-      (arr[idx])['pull_down'] = e.target.checked;
+      (arr[idx])['pull_down'] = Number(e.target.checked);
       this.setState({
         config: arr
       })
     }
   }
 
+  handleStateChange(e) {
+      let id = e.target.id.replace("state", "");
+      axios.post('/api/gpio/state', {
+        pin: Number(id),
+        state: e.target.checked ? 1 : 0
+      })
+      .then(res => {
+        console.log(res.data);
+      })
+  }
+
   handleApplyChanges() {
     axios.post('/api/gpio', {
-      enable: this.state.enable,
       config: this.state.config
     })
     .then(res => {
@@ -84,15 +89,19 @@ class Gpio  extends Component {
 
   render() {
     let { state } = this;
+    console.log(state.config)
 
     let rows = state.config.map((item, index) => {
           return (
               <tr key={item.id}>
                 <th scope="col">{item.id}</th>
                 <th scope="col">
-                  <div className="custom-control custom-switch">
-                      <input type="checkbox" className="custom-control-input" defaultChecked={item.mode} id={"sw" + item.id} onClick={this.handleModeChange} />
-                      <label className="custom-control-label" htmlFor={"sw" + item.id}>Output</label>
+                  <div className="form-group">
+                    <select id={"sw" + item.id} value={item.mode} className="form-control" onChange={this.handleModeChange}>
+                      <option value="-1">Disabled</option>
+                      <option value="0">Input</option>
+                      <option value="1">Output</option>
+                    </select>
                   </div>
                 </th>
                 <th scope="col">
@@ -107,21 +116,18 @@ class Gpio  extends Component {
                       <label className="custom-control-label" htmlFor={"p_dn" + item.id}>enable</label>
                   </div>
                 </th>
-          <th scope="col">{item.state}</th>
+                <th scope="col">
+                  <div className="custom-control custom-switch">
+                      <input type="checkbox" className="custom-control-input" defaultChecked="false" id={"state" + item.id} onClick={this.handleStateChange} />
+                      <label className="custom-control-label" htmlFor={"state" + item.id}>state</label>
+                  </div>
+                </th>
               </tr>
           )
     });
 
     return(
       <div className="container">
-        <div className="form-group">
-              <div className="form-check">
-                <input className="form-check-input" type="checkbox" id="enableGpio" defaultChecked={state.enable} onClick={this.handleGpioEnable}/>
-                <label className="form-check-label" htmlFor="enableGpio">
-                  Enable GPIO
-                </label>
-              </div>
-            </div>
         <table className="table">
             <thead className="thead-dark">
               <tr>

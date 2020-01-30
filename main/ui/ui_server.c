@@ -184,13 +184,30 @@ static esp_err_t gpio_control_post_handler(httpd_req_t *req) {
     buf[total_len] = '\0';
 
     cJSON *gpio = cJSON_Parse(buf);
-    status = gpioInitFromJson(gpio) > -1;
+    if (gpio == NULL)
+    {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        if (error_ptr != NULL)
+        {
+            fprintf(stderr, "Error before: %s\n", error_ptr);
+        }
+        status = 0;
+        goto end;
+    }
+    ESP_LOGD(REST_TAG, "JSON received OK");
+    cJSON *pins = cJSON_GetObjectItem(gpio, "config");
+    char *string = cJSON_Print(pins);
+    ESP_LOGD(REST_TAG, "Got pins: %s", string);
+    status = gpioInitFromJson(pins);
+    ESP_LOGD(REST_TAG, "JSON processed OK with status %d", status);
     if (status == -1) {
         ESP_LOGD(REST_TAG, "Writing gpio config");
-        writeGpioConfig(gpio);
+        writeGpioConfig(pins);
     }
+    ESP_LOGD(REST_TAG, "exiting,status %d", status);
 
-    cJSON_Delete(gpio);
+end:
+   // cJSON_Delete(gpio);
     if (status == -1) {
         httpd_resp_sendstr(req, "OK");
         return ESP_OK;

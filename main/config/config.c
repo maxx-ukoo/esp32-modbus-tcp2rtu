@@ -112,16 +112,11 @@ void writeModbusConfig(bool enable, int speed) {
 
 void writeGpioConfig(cJSON *gpio) {
     cJSON *config = readConfig();
+    ESP_LOGD(CONFIG_TAG, "Read");
     cJSON_ReplaceItemInObject(config,"gpio",gpio);
+    ESP_LOGD(CONFIG_TAG, "Replaced");
     writeConfig(config);
+    ESP_LOGD(CONFIG_TAG, "write");
     cJSON_Delete(config);
+    ESP_LOGD(CONFIG_TAG, "deleted");
 }
-
-
-
-
-
-
-
-
-
