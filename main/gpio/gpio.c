@@ -32,6 +32,7 @@ static int gpioConfig[GPIO_NUMBER][5] = {
 
 static xQueueHandle gpio_evt_queue = NULL;
 static TaskHandle_t gpio_task_xHandle = NULL;
+static esp_err_t esr_service_status = NULL;
 
 static void IRAM_ATTR gpio_isr_handler(void* arg)
 {
@@ -45,7 +46,7 @@ static void gpio_task(void* arg)
     for(;;) {
         if(xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY)) {
             ESP_LOGD(GPIO_TAG, "GPIO[%d] intr, val:%d", io_num, gpio_get_level(io_num));
-            printf("GPIO[%d] intr, val: %d\n", io_num, gpio_get_level(io_num));
+            //printf("GPIO[%d] intr, val: %d\n", io_num, gpio_get_level(io_num));
         }
     }
 }
@@ -66,11 +67,13 @@ static esp_err_t gpioInit() {
     }
     if (gpio_task_xHandle == NULL) {
         ESP_LOGD(GPIO_TAG, "GPIO TASK created");
-        xTaskCreate(gpio_task, "gpio_task", 2048, NULL, 10, NULL);
+        gpio_task_xHandle = xTaskCreate(gpio_task, "gpio_task", 2048, NULL, 10, NULL);
     }
-    ESP_LOGD(GPIO_TAG, "instaling isr service");
-    gpio_install_isr_service(0);
-    ESP_LOGD(GPIO_TAG, "installed");
+    if (esr_service_status == NULL) {
+        ESP_LOGD(GPIO_TAG, "instaling isr service");
+        esr_service_status = gpio_install_isr_service(0);
+        ESP_LOGD(GPIO_TAG, "installed");
+    }
 
     for (int i = 0; i < GPIO_NUMBER; ++i) {
         gpio_isr_handler_remove(gpioConfig[i][ID]);

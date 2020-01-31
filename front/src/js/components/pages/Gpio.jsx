@@ -79,11 +79,7 @@ class Gpio  extends Component {
       config: this.state.config
     })
     .then(res => {
-      console.log("rebooting");
-      axios.post('/api/v1/system/reboot')
-      .then(res => {
-          
-      })
+     
     })
   }
 

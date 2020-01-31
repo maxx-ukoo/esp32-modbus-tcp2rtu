@@ -48,7 +48,10 @@ class Modbus extends Component {
     console.log("rebooting");
     axios.post('/api/v1/system/reboot')
     .then(res => {
-        
+      console.log("rebooting");
+      axios.post('/api/v1/system/reboot')
+      .then(res => {
+      })
     })
   }
 
