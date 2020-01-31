@@ -32,7 +32,7 @@ static int gpioConfig[GPIO_NUMBER][5] = {
 
 static xQueueHandle gpio_evt_queue = NULL;
 static TaskHandle_t gpio_task_xHandle = NULL;
-static esp_err_t esr_service_status = NULL;
+static esp_err_t esr_service_status = ESP_FAIL;
 
 static void IRAM_ATTR gpio_isr_handler(void* arg)
 {
@@ -69,7 +69,8 @@ static esp_err_t gpioInit() {
         ESP_LOGD(GPIO_TAG, "GPIO TASK created");
         gpio_task_xHandle = xTaskCreate(gpio_task, "gpio_task", 2048, NULL, 10, NULL);
     }
-    if (esr_service_status == NULL) {
+    ESP_LOGD(GPIO_TAG, "esr_service_status: %d", esr_service_status);
+    if (esr_service_status != ESP_OK) {
         ESP_LOGD(GPIO_TAG, "instaling isr service");
         esr_service_status = gpio_install_isr_service(0);
         ESP_LOGD(GPIO_TAG, "installed");
