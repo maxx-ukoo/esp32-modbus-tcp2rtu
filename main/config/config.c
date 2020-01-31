@@ -5,6 +5,7 @@
 
 #include "esp_log.h"
 #include "gpio\gpio.h"
+#include "mqtt\mqtt.h"
 
 
 static const char *CONFIG_TAG = "IOT DIN Config";
@@ -56,6 +57,8 @@ cJSON * createDefaultConfig() {
     cJSON_AddItemToObject(config, "modbus", modbus);
     cJSON *gpio = getGpioConfig();
     cJSON_AddItemToObject(config, "gpio", gpio);
+    cJSON *mqtt = get_mqtt_config();
+    cJSON_AddItemToObject(config, "mqtt", mqtt);
     writeConfig(config);
     return config;
     end:
@@ -114,6 +117,17 @@ void writeGpioConfig(cJSON *gpio) {
     cJSON *config = readConfig();
     ESP_LOGD(CONFIG_TAG, "Read");
     cJSON_ReplaceItemInObject(config,"gpio",gpio);
+    ESP_LOGD(CONFIG_TAG, "Replaced");
+    writeConfig(config);
+    ESP_LOGD(CONFIG_TAG, "write");
+    cJSON_Delete(config);
+    ESP_LOGD(CONFIG_TAG, "deleted");
+}
+
+void write_mqtt_config(cJSON *mqtt) {
+    cJSON *config = readConfig();
+    ESP_LOGD(CONFIG_TAG, "Read");
+    cJSON_ReplaceItemInObject(config,"mqtt",mqtt);
     ESP_LOGD(CONFIG_TAG, "Replaced");
     writeConfig(config);
     ESP_LOGD(CONFIG_TAG, "write");

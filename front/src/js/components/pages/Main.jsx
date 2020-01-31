@@ -3,6 +3,7 @@ import { Switch, Route, Link } from 'react-router-dom'; // import the react-rout
 import Home from './Home.jsx'
 import Modbus from './Modbus.jsx'
 import Gpio from './Gpio.jsx'
+import Mqtt from './Mqtt.jsx'
 
 const Main = () => (
   <main>
@@ -10,6 +11,7 @@ const Main = () => (
       <Route exact path='/' component={Home} />
       <Route exact path='/modbus' component={Modbus}/>
       <Route exact path='/io' component={Gpio} />
+      <Route exact path='/mqtt' component={Mqtt} />
     </Switch>
   </main>
 );

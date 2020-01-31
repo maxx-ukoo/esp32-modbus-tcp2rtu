@@ -32,12 +32,40 @@ static int gpioConfig[GPIO_NUMBER][5] = {
 
 static xQueueHandle gpio_evt_queue = NULL;
 static TaskHandle_t gpio_task_xHandle = NULL;
+static TaskHandle_t mqtt2gpio_task_xHandle = NULL;
+
 static esp_err_t esr_service_status = ESP_FAIL;
+static xQueueHandle gpio2mqtt_queue = NULL;
+static xQueueHandle mqtt2gpio_queue = NULL;
 
 static void IRAM_ATTR gpio_isr_handler(void* arg)
 {
     uint32_t gpio_num = (uint32_t) arg;
     xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
+}
+
+static void mqtt2gpio_task(void* arg)
+{
+    pin_state_msg_t msg;
+    for(;;) {
+        if (mqtt2gpio_queue != NULL) {
+            if(xQueueReceive(mqtt2gpio_queue, &msg, portMAX_DELAY)) {
+                ESP_LOGD(GPIO_TAG, "MQTT2GPIO received GPIO[%d] intr, val:%d", msg.pin, msg.state);
+                gpio_set_level(msg.pin, msg.state);
+            }
+        } else {
+            vTaskDelay(50);
+        }
+    }
+}
+
+void set_mqtt_gpio_evt_queue(xQueueHandle gpio2mqtt_queue_handler, xQueueHandle mqtt2gpio_queue_handler){
+    gpio2mqtt_queue = gpio2mqtt_queue_handler;
+    mqtt2gpio_queue = mqtt2gpio_queue_handler;
+    if (mqtt2gpio_task_xHandle == NULL) {
+        ESP_LOGD(GPIO_TAG, "GPIO TASK creating");
+        mqtt2gpio_task_xHandle = xTaskCreate(mqtt2gpio_task, "mqtt2gpio_task", 2048, NULL, 10, NULL);
+    }
 }
 
 static void gpio_task(void* arg)
@@ -47,6 +75,15 @@ static void gpio_task(void* arg)
         if(xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY)) {
             ESP_LOGD(GPIO_TAG, "GPIO[%d] intr, val:%d", io_num, gpio_get_level(io_num));
             //printf("GPIO[%d] intr, val: %d\n", io_num, gpio_get_level(io_num));
+            if (gpio2mqtt_queue != NULL) {
+                pin_state_msg_t msg = {
+                    .pin = io_num,
+                    .state = gpio_get_level(io_num)
+                };
+                if (xQueueSend(gpio2mqtt_queue, &msg, pdMS_TO_TICKS(100)) != pdTRUE) {
+                    ESP_LOGE(GPIO_TAG, "send pin state message failed or timeout");
+                }                
+            }
         }
     }
 }

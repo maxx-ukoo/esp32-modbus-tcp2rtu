@@ -59,12 +59,14 @@ class Modbus extends Component {
     let { state } = this;
     return (
           <div className="container">
-            <div className="form-group">
-              <label htmlFor="modbusSpeed">Port speed</label>
+            <div className="input-group mb-3">
+              <div className="input-group-prepend">
+                  <span className="input-group-text" id="inputGroup-sizing-default">Port speed</span>
+              </div>
               <select id="modbusSpeed" className="form-control" value={state.speed} onChange={this.handleModBusSpeedChange}>
                 <option>9600</option>
                 <option>115200</option>
-              </select>
+              </select>                    
             </div>
             <div className="form-group">
               <div className="form-check">
