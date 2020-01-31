@@ -11,6 +11,7 @@ class Header extends Component {
         links: [
           {path: "/modbus", text: "Modbus", isActive: false},
           {path: "/io", text: "IO", isActive: false},
+          {path: "/mqtt", text: "MQTT", isActive: false},
         ]
       }
     }

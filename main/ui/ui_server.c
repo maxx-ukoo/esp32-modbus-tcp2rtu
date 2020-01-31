@@ -127,39 +127,6 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-/* Simple handler for light brightness control */
-/*
-static esp_err_t light_brightness_post_handler(httpd_req_t *req)
-{
-    int total_len = req->content_len;
-    int cur_len = 0;
-    char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
-    int received = 0;
-    if (total_len >= SCRATCH_BUFSIZE) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content too long");
-        return ESP_FAIL;
-    }
-    while (cur_len < total_len) {
-        received = httpd_req_recv(req, buf + cur_len, total_len);
-        if (received <= 0) {
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to post control value");
-            return ESP_FAIL;
-        }
-        cur_len += received;
-    }
-    buf[total_len] = '\0';
-
-    cJSON *root = cJSON_Parse(buf);
-    int red = cJSON_GetObjectItem(root, "red")->valueint;
-    int green = cJSON_GetObjectItem(root, "green")->valueint;
-    int blue = cJSON_GetObjectItem(root, "blue")->valueint;
-    ESP_LOGI(REST_TAG, "Light control: red = %d, green = %d, blue = %d", red, green, blue);
-    cJSON_Delete(root);
-    httpd_resp_sendstr(req, "Post control value successfully");
-    return ESP_OK;
-}
-*/
-
 static esp_err_t gpio_control_post_handler(httpd_req_t *req) {
     int total_len = req->content_len;
     int cur_len = 0;
@@ -334,6 +301,7 @@ static esp_err_t system_info_get_handler(httpd_req_t *req)
     cJSON_AddStringToObject(root, "time", app_desc->time);
     cJSON_AddStringToObject(root, "idf_ver", app_desc->idf_ver);
     cJSON_AddStringToObject(root, "uptime", esp_log_system_timestamp());
+    cJSON_AddNumberToObject(root, "memory", esp_get_free_heap_size());
     const char *sys_info = cJSON_Print(root);
     httpd_resp_sendstr(req, sys_info);
     free((void *)sys_info);
