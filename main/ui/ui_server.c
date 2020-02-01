@@ -7,8 +7,7 @@
    CONDITIONS OF ANY KIND, either express or implied.
 */
 #include "ui_server.h"
-#include "config/config.h"
-#include "gpio/gpio.h"
+#include "ui_server_handler.h"
 #include <string.h>
 #include <fcntl.h>
 #include "esp_http_server.h"
@@ -23,7 +22,6 @@
 
 static const char *REST_TAG = "IOT DIN Server";
 
-
 #define REST_CHECK(a, str, goto_tag, ...)                                              \
     do                                                                                 \
     {                                                                                  \
@@ -33,14 +31,6 @@ static const char *REST_TAG = "IOT DIN Server";
             goto goto_tag;                                                             \
         }                                                                              \
     } while (0)
-
-#define FILE_PATH_MAX (ESP_VFS_PATH_MAX + 128)
-#define SCRATCH_BUFSIZE (10240)
-
-typedef struct rest_server_context {
-    char base_path[ESP_VFS_PATH_MAX + 1];
-    char scratch[SCRATCH_BUFSIZE];
-} rest_server_context_t;
 
 #define CHECK_FILE_EXTENSION(filename, ext) (strcasecmp(&filename[strlen(filename) - strlen(ext)], ext) == 0)
 
@@ -127,164 +117,6 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-static esp_err_t gpio_control_post_handler(httpd_req_t *req) {
-    int total_len = req->content_len;
-    int cur_len = 0;
-    char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
-    int received = 0;
-    int status = -1;
-    
-    if (total_len >= SCRATCH_BUFSIZE) {
-        /* Respond with 500 Internal Server Error */
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content too long");
-        return ESP_FAIL;
-    }
-    while (cur_len < total_len) {
-        received = httpd_req_recv(req, buf + cur_len, total_len);
-        if (received <= 0) {
-            /* Respond with 500 Internal Server Error */
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to post control value");
-            return ESP_FAIL;
-        }
-        cur_len += received;
-    }
-    buf[total_len] = '\0';
-
-    cJSON *gpio = cJSON_Parse(buf);
-    if (gpio == NULL)
-    {
-        const char *error_ptr = cJSON_GetErrorPtr();
-        if (error_ptr != NULL)
-        {
-            fprintf(stderr, "Error before: %s\n", error_ptr);
-        }
-        status = 0;
-        goto end;
-    }
-    ESP_LOGD(REST_TAG, "JSON received OK");
-    cJSON *pins = cJSON_GetObjectItem(gpio, "config");
-    char *string = cJSON_Print(pins);
-    ESP_LOGD(REST_TAG, "Got pins: %s", string);
-    status = gpioInitFromJson(pins);
-    ESP_LOGD(REST_TAG, "JSON processed OK with status %d", status);
-    if (status == -1) {
-        ESP_LOGD(REST_TAG, "Writing gpio config");
-        writeGpioConfig(pins);
-    }
-    ESP_LOGD(REST_TAG, "exiting,status %d", status);
-
-end:
-   // cJSON_Delete(gpio);
-    if (status == -1) {
-        httpd_resp_sendstr(req, "OK");
-        return ESP_OK;
-    } else {
-        char resp[15];
-        sprintf(resp, "Pin error %d", status);
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, resp);
-        return ESP_FAIL;
-    }
-}
-
-static esp_err_t gpio_control_state_get_handler(httpd_req_t *req) {
-
-    char*  buf;
-    size_t buf_len;
-    char param[32];
-
-    /* Read URL query string length and allocate memory for length + 1,
-     * extra byte for null termination */
-    buf_len = httpd_req_get_url_query_len(req) + 1;
-    if (buf_len > 1) {
-        buf = malloc(buf_len);
-        if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
-            ESP_LOGI(REST_TAG, "Found URL query => %s", buf);           
-            /* Get value of expected key from query string */
-            if (httpd_query_key_value(buf, "pin", param, sizeof(param)) == ESP_OK) {
-                ESP_LOGD(REST_TAG, "Found URL query parameter => query1=%s", param);
-            }
-        }
-        free(buf);
-    }
-    int pin = atoi(param);
-    ESP_LOGD(REST_TAG, "Get gpio state: pin = %d", pin);
-    cJSON *res =  getPinState(pin);
-    const char *resp_body = cJSON_Print(res);
-    httpd_resp_sendstr(req, resp_body);
-    free((void *)resp_body);
-    cJSON_Delete(res);
-    return ESP_OK;
-}
-
-static esp_err_t gpio_control_state_post_handler(httpd_req_t *req) {
-    int total_len = req->content_len;
-    int cur_len = 0;
-    char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
-    int received = 0;
-    
-    if (total_len >= SCRATCH_BUFSIZE) {
-        /* Respond with 500 Internal Server Error */
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content too long");
-        return ESP_FAIL;
-    }
-    while (cur_len < total_len) {
-        received = httpd_req_recv(req, buf + cur_len, total_len);
-        if (received <= 0) {
-            /* Respond with 500 Internal Server Error */
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to post control value");
-            return ESP_FAIL;
-        }
-        cur_len += received;
-    }
-    buf[total_len] = '\0';
-
-    cJSON *json_body = cJSON_Parse(buf);
-    int pin = cJSON_GetObjectItem(json_body, "pin")->valueint;
-    int state = cJSON_GetObjectItem(json_body, "state")->valueint;
-    ESP_LOGI(REST_TAG, "Update gpio state: pin = %d, state = %d", pin, state);
-    cJSON *res =  setPinState(pin, state);
-    const char *resp_body = cJSON_Print(res);
-    httpd_resp_sendstr(req, resp_body);
-    free((void *)resp_body);
-    cJSON_Delete(json_body);
-    cJSON_Delete(res);
-    return ESP_OK;
-}
-
-static esp_err_t modbus_control_post_handler(httpd_req_t *req)
-{
-    int total_len = req->content_len;
-    int cur_len = 0;
-    char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
-    int received = 0;
-    if (total_len >= SCRATCH_BUFSIZE) {
-        /* Respond with 500 Internal Server Error */
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content too long");
-        return ESP_FAIL;
-    }
-    while (cur_len < total_len) {
-        received = httpd_req_recv(req, buf + cur_len, total_len);
-        if (received <= 0) {
-            /* Respond with 500 Internal Server Error */
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to post control value");
-            return ESP_FAIL;
-        }
-        cur_len += received;
-    }
-    buf[total_len] = '\0';
-
-    cJSON *root = cJSON_Parse(buf);
-    int enable = cJSON_GetObjectItem(root, "enable")->valueint;
-    int speed = cJSON_GetObjectItem(root, "speed")->valueint;
-
-    ESP_LOGI(REST_TAG, "Modbus control: enable = %d, speed = %d", enable, speed);
-    writeModbusConfig(enable, speed);
-
-    cJSON_Delete(root);
-    httpd_resp_sendstr(req, "OK");
-    return ESP_OK;
-}
-
 /* Simple handler for getting system handler */
 
 static esp_err_t system_info_get_handler(httpd_req_t *req)
@@ -314,95 +146,6 @@ static esp_err_t system_reboot_post_handler(httpd_req_t *req)
     esp_restart();
     return ESP_OK;
 }
-
-/* Simple handler for getting temperature data */
-/*
-static esp_err_t temperature_data_get_handler(httpd_req_t *req)
-{
-    httpd_resp_set_type(req, "application/json");
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "raw", esp_random() % 20);
-    const char *sys_info = cJSON_Print(root);
-    httpd_resp_sendstr(req, sys_info);
-    free((void *)sys_info);
-    cJSON_Delete(root);
-    return ESP_OK;
-}*/
-
-/*
-
-esp_err_t ui_http_webserver_start(const char *base_path)
-{
-    REST_CHECK(base_path, "wrong base path", err);
-    rest_server_context_t *rest_context = calloc(1, sizeof(rest_server_context_t));
-    REST_CHECK(rest_context, "No memory for rest context", err);
-    strlcpy(rest_context->base_path, base_path, sizeof(rest_context->base_path));
-
-    httpd_handle_t server = NULL;
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.uri_match_fn = httpd_uri_match_wildcard;
-
-    ESP_LOGI(REST_TAG, "Starting HTTP Server");
-    REST_CHECK(httpd_start(&server, &config) == ESP_OK, "Start server failed", err_start);
-
-    httpd_uri_t system_info_get_uri = {
-        .uri = "/api/v1/system/info",
-        .method = HTTP_GET,
-        .handler = system_info_get_handler,
-        .user_ctx = rest_context
-    };
-    httpd_register_uri_handler(server, &system_info_get_uri);
-
-    httpd_uri_t temperature_data_get_uri = {
-        .uri = "/api/v1/temp/raw",
-        .method = HTTP_GET,
-        .handler = temperature_data_get_handler,
-        .user_ctx = rest_context
-    };
-    httpd_register_uri_handler(server, &temperature_data_get_uri);
-
-    httpd_uri_t light_brightness_post_uri = {
-        .uri = "/api/v1/light/brightness",
-        .method = HTTP_POST,
-        .handler = light_brightness_post_handler,
-        .user_ctx = rest_context
-    };
-    httpd_register_uri_handler(server, &light_brightness_post_uri);
-
-    httpd_uri_t common_get_uri = {
-        .uri = "/ *",
-        .method = HTTP_GET,
-        .handler = rest_common_get_handler,
-        .user_ctx = rest_context
-    };
-    httpd_register_uri_handler(server, &common_get_uri);
-
-    return ESP_OK;
-err_start:
-    free(rest_context);
-err:
-    return ESP_FAIL;
-}
-*/
-
-
-/* An HTTP GET handler */
-/*
-static esp_err_t root_get_handler(httpd_req_t *req)
-{
-    httpd_resp_set_type(req, "text/html");
-    httpd_resp_send(req, "<h1>Hello Secure World!</h1>", -1); // -1 = use strlen()
-
-    return ESP_OK;
-}
-
-
-static const httpd_uri_t root = {
-    .uri       = "/",
-    .method    = HTTP_GET,
-    .handler   = root_get_handler
-};
-*/
 
 httpd_handle_t ui_http_webserver_start(const char *base_path)
 {
@@ -449,6 +192,15 @@ httpd_handle_t ui_http_webserver_start(const char *base_path)
         .user_ctx = rest_context
     };
     httpd_register_uri_handler(server, &modbus_control_post_uri);
+
+    /* URI handler for MQTT settings */
+    httpd_uri_t mqtt_control_post_uri = {
+        .uri = "/api/mqtt",
+        .method = HTTP_POST,
+        .handler = mqtt_control_post_handler,
+        .user_ctx = rest_context
+    };
+    httpd_register_uri_handler(server, &mqtt_control_post_uri);
 
     /* URI handler for GPIO settings */
     httpd_uri_t gpio_control_post_uri = {
