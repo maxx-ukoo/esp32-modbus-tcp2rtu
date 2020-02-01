@@ -3,6 +3,7 @@
         "sdkconfig.h": "c",
         "string": "c",
         "random": "c",
-        "ui_server_handler.h": "c"
+        "ui_server_handler.h": "c",
+        "array": "c"
     }
 }

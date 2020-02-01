@@ -18,10 +18,18 @@
 #ifndef GPIO_H
 #define GPIO_H
 
+#include "esp_event.h"
+
+typedef struct {
+    int pin;
+    int state;
+} pin_state_msg_t;
+
 int gpioInitFromJson(cJSON *gpio);
 cJSON * getGpioConfig();
 cJSON * getPinState(int pin);
 cJSON * setPinState(int pin, int state);
+void set_mqtt_gpio_evt_queue(xQueueHandle gpio2mqtt_queue_handler, xQueueHandle mqtt2gpio_queue_handler);
 
 #endif /* GPIO_H */
 

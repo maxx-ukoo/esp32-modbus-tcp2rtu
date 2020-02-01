@@ -36,6 +36,7 @@
 #include "modbus/modbus.h"
 #include "ui/ui_server.h"
 #include "gpio/gpio.h"
+#include "mqtt/mqtt.h"
 
 //#include <esp_https_server.h>
 
@@ -161,6 +162,8 @@ void components_start(void) {
 
     cJSON *gpio = cJSON_GetObjectItem(config, "gpio");
     gpioInitFromJson(gpio);
+    cJSON *mqtt = cJSON_GetObjectItem(config, "mqtt");
+    mqtt_init_from_json(mqtt);
     cJSON_Delete(config);
 }
 
