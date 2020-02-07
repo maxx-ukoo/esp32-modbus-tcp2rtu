@@ -26,6 +26,5 @@ idf.py -p COMX flash
 [Setup webapp](https://www.valentinog.com/blog/babel/)
 [Bootstrap](https://www.turtle-techies.com/post/react-navbar-with-bootstrap-4/)
 [IEEE754 converter](https://www.h-schmidt.net/FloatConverter/IEEE754.html)
-
-
+[OTA](https://github.com/versamodule/ESP32-OTA-Webserver/blob/master/OTAServer.c)
 Copyright (C) 2019 Maksym Krasovskyi

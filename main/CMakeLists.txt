@@ -1,6 +1,7 @@
 idf_component_register(SRCS "iot_module_main.c"
                             "ui/ui_server.c"
                             "ui/ui_server_handler.c"
+                            "ui/ota_handler.c"
                             "config/config.c"
                             "modbus/modbus.c"
                             "gpio/gpio.c"

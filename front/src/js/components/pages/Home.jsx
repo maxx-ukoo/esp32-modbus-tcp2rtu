@@ -19,7 +19,7 @@ class Home extends Component {
     }
 
     componentDidMount() {
-      axios.get('/api/v1/system/info')
+      axios.get('/api/system/info')
       .then(res => {
           this.setState({
             model: res.data.model,

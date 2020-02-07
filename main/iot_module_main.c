@@ -37,6 +37,7 @@
 #include "ui/ui_server.h"
 #include "gpio/gpio.h"
 #include "mqtt/mqtt.h"
+#include "ui/ota_handler.h"
 
 //#include <esp_https_server.h>
 
@@ -134,21 +135,6 @@ esp_err_t init_fs(void)
         ESP_LOGI(TAG, "Partition size: total: %d, used: %d", total, used);
     }
 
-/*
-    DIR *dir = NULL;
-    printf("\nList of Directory [%s]\n", CONFIG_EXAMPLE_WEB_MOUNT_POINT);
-    printf("-----------------------------------\n");
-    // Open directory
-    dir = opendir(CONFIG_EXAMPLE_WEB_MOUNT_POINT);
-    if (!dir) {
-        printf("Error opening directory\n");
-        return ESP_OK;
-    }
-    struct dirent *ent;
-    while ((ent = readdir(dir)) != NULL) {
-        printf(ent->d_name);
-        printf("\n");
-    }*/
     return ESP_OK;
 }
 
@@ -203,5 +189,7 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_eth_start(eth_handle));
     ESP_ERROR_CHECK(init_fs());
     components_start();
+
+    xTaskCreate(&ota_system_reboot_task, "ota_system_reboot_task", 2048, NULL, 5, NULL);
 
 }

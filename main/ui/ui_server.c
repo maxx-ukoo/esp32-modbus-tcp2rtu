@@ -8,12 +8,13 @@
 */
 #include "ui_server.h"
 #include "ui_server_handler.h"
+#include "ota_handler.h"
 #include <string.h>
 #include <fcntl.h>
 #include "esp_http_server.h"
 #include "esp_system.h"
-#include "esp_ota_ops.h"
-#include "esp_image_format.h"
+
+
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #include "esp_log.h"
@@ -117,35 +118,6 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-/* Simple handler for getting system handler */
-
-static esp_err_t system_info_get_handler(httpd_req_t *req)
-{
-    httpd_resp_set_type(req, "application/json");
-    cJSON *root = cJSON_CreateObject();
-    esp_chip_info_t chip_info;
-    esp_chip_info(&chip_info);
-    cJSON_AddNumberToObject(root, "model", chip_info.model);
-    cJSON_AddNumberToObject(root, "cores", chip_info.cores);
-    esp_app_desc_t *app_desc = esp_ota_get_app_description();
-    cJSON_AddStringToObject(root, "date", app_desc->date);
-    cJSON_AddStringToObject(root, "version", app_desc->version);
-    cJSON_AddStringToObject(root, "time", app_desc->time);
-    cJSON_AddStringToObject(root, "idf_ver", app_desc->idf_ver);
-    cJSON_AddStringToObject(root, "uptime", esp_log_system_timestamp());
-    cJSON_AddNumberToObject(root, "memory", esp_get_free_heap_size());
-    const char *sys_info = cJSON_Print(root);
-    httpd_resp_sendstr(req, sys_info);
-    free((void *)sys_info);
-    cJSON_Delete(root);
-    return ESP_OK;
-}
-
-static esp_err_t system_reboot_post_handler(httpd_req_t *req)
-{
-    esp_restart();
-    return ESP_OK;
-}
 
 httpd_handle_t ui_http_webserver_start(const char *base_path)
 {
@@ -184,41 +156,41 @@ httpd_handle_t ui_http_webserver_start(const char *base_path)
     //httpd_register_uri_handler(server, &root);
         /* URI handler for getting web server files */
 
+    /* URI handler for settings */
+    httpd_uri_t component_control_post_uri = {
+        .uri = "/api/*",
+        .method = HTTP_POST,
+        .handler = component_control_post_handler,
+        .user_ctx = rest_context
+    };
+    httpd_register_uri_handler(server, &component_control_post_uri);
+
     /* URI handler for ModBus settings */
-    httpd_uri_t modbus_control_post_uri = {
+/*    httpd_uri_t modbus_control_post_uri = {
         .uri = "/api/modbus",
         .method = HTTP_POST,
         .handler = modbus_control_post_handler,
         .user_ctx = rest_context
     };
-    httpd_register_uri_handler(server, &modbus_control_post_uri);
+    httpd_register_uri_handler(server, &modbus_control_post_uri); */
 
     /* URI handler for MQTT settings */
-    httpd_uri_t mqtt_control_post_uri = {
+/*    httpd_uri_t mqtt_control_post_uri = {
         .uri = "/api/mqtt",
         .method = HTTP_POST,
         .handler = mqtt_control_post_handler,
         .user_ctx = rest_context
     };
-    httpd_register_uri_handler(server, &mqtt_control_post_uri);
+    httpd_register_uri_handler(server, &mqtt_control_post_uri);*/
 
     /* URI handler for GPIO settings */
-    httpd_uri_t gpio_control_post_uri = {
+/*    httpd_uri_t gpio_control_post_uri = {
         .uri = "/api/gpio",
         .method = HTTP_POST,
         .handler = gpio_control_post_handler,
         .user_ctx = rest_context
     };
-    httpd_register_uri_handler(server, &gpio_control_post_uri);
-
-    /* URI handler for control pin state */
-    httpd_uri_t gpio_control_state_post_uri = {
-        .uri = "/api/gpio/state",
-        .method = HTTP_POST,
-        .handler = gpio_control_state_post_handler,
-        .user_ctx = rest_context
-    };
-    httpd_register_uri_handler(server, &gpio_control_state_post_uri);
+    httpd_register_uri_handler(server, &gpio_control_post_uri);*/
 
     /* URI handler for control pin state */
     httpd_uri_t gpio_control_state_get_uri = {
@@ -231,21 +203,27 @@ httpd_handle_t ui_http_webserver_start(const char *base_path)
 
    /* URI handler for fetching system info */
     httpd_uri_t system_info_get_uri = {
-        .uri = "/api/v1/system/info",
+        .uri = "/api/system/info",
         .method = HTTP_GET,
         .handler = system_info_get_handler,
         .user_ctx = rest_context
     };
     httpd_register_uri_handler(server, &system_info_get_uri);
 
-   /* URI handler for reboot system */
-    httpd_uri_t system_reset_post_uri = {
-        .uri = "/api/v1/system/reboot",
+    httpd_uri_t ota_post = {
+        .uri = "/ota/*",
         .method = HTTP_POST,
-        .handler = system_reboot_post_handler,
-        .user_ctx = rest_context
+        .handler = ota_post_handler,
+        .user_ctx = NULL
     };
-    httpd_register_uri_handler(server, &system_reset_post_uri);
+    httpd_register_uri_handler(server, &ota_post);
+    httpd_uri_t ota_get = {
+        .uri = "/ota/*",
+        .method = HTTP_GET,
+        .handler = ota_get_handler,
+        .user_ctx = NULL
+    };
+    httpd_register_uri_handler(server, &ota_get);
 
     httpd_uri_t common_get_uri = {
         .uri = "/*",

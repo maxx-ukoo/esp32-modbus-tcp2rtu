@@ -84,7 +84,7 @@ class Mqtt extends Component {
     let error = null;
     if(this.state.error) {
       error =  (
-        <div class="alert alert-danger alert-dismissible fade show">
+        <div className="alert alert-danger alert-dismissible fade show">
           <strong>Error!</strong> A problem has been occurred while submitting your data. {this.state.error}
           <button type="button" class="close" data-dismiss="alert">&times;</button>
         </div>

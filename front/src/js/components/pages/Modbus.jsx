@@ -46,12 +46,9 @@ class Modbus extends Component {
 
   handleApplyChanges() {
     console.log("rebooting");
-    axios.post('/api/v1/system/reboot')
+    axios.post('/api/system/reboot')
     .then(res => {
-      console.log("rebooting");
-      axios.post('/api/v1/system/reboot')
-      .then(res => {
-      })
+        console.log("OK");
     })
   }
 

@@ -12,6 +12,7 @@ class Header extends Component {
           {path: "/modbus", text: "Modbus", isActive: false},
           {path: "/io", text: "IO", isActive: false},
           {path: "/mqtt", text: "MQTT", isActive: false},
+          {path: "/ota", text: "Update", isActive: false},
         ]
       }
     }

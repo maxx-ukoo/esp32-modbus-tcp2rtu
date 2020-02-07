@@ -21,11 +21,16 @@ typedef struct rest_server_context {
     char scratch[SCRATCH_BUFSIZE];
 } rest_server_context_t;
 
-esp_err_t modbus_control_post_handler(httpd_req_t *req);
-esp_err_t mqtt_control_post_handler(httpd_req_t *req);
-esp_err_t gpio_control_post_handler(httpd_req_t *req);
+
+esp_err_t component_control_post_handler(httpd_req_t *req);
+static esp_err_t modbus_control_post_handler(httpd_req_t *req, char * buf);
+static esp_err_t mqtt_control_post_handler(httpd_req_t *req, char * buf);
+static esp_err_t gpio_control_post_handler(httpd_req_t *req, char * buf);
+static esp_err_t system_reboot_post_handler(httpd_req_t *req, char * buf);
+static esp_err_t gpio_control_state_post_handler(httpd_req_t *req, char * buf);
+esp_err_t system_info_get_handler(httpd_req_t *req);
 esp_err_t gpio_control_state_get_handler(httpd_req_t *req);
-esp_err_t gpio_control_state_post_handler(httpd_req_t *req);
+
 
 #endif /* UI_SERVER_HANDLER_H */
 

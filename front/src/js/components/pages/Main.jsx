@@ -4,6 +4,7 @@ import Home from './Home.jsx'
 import Modbus from './Modbus.jsx'
 import Gpio from './Gpio.jsx'
 import Mqtt from './Mqtt.jsx'
+import OtaUpdate from './OtaUpdate.jsx'
 
 const Main = () => (
   <main>
@@ -12,6 +13,7 @@ const Main = () => (
       <Route exact path='/modbus' component={Modbus}/>
       <Route exact path='/io' component={Gpio} />
       <Route exact path='/mqtt' component={Mqtt} />
+      <Route exact path='/ota' component={OtaUpdate} />
     </Switch>
   </main>
 );

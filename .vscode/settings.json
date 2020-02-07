@@ -4,6 +4,8 @@
         "string": "c",
         "random": "c",
         "ui_server_handler.h": "c",
-        "array": "c"
+        "array": "c",
+        "initializer_list": "c",
+        "utility": "c"
     }
 }
