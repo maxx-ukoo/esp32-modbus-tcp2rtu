@@ -29,7 +29,7 @@ class Header extends Component {
     render() {
       return (
         <div>
-          <nav className="navbar navbar-expand-lg navbar-light  bg-light">
+          <nav className="navbar navbar-expand-lg bg-dark navbar-dark">
             <Link className="navbar-brand" to="/">Home</Link>
             <ul className="navbar-nav">
               {this.state.links.map((link, i) => 

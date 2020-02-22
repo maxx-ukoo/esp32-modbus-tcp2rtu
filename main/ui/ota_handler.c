@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+//#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #include <esp_log.h>
 #include <sys/param.h>
 #include <esp_http_server.h>
@@ -354,6 +354,9 @@ static esp_err_t upload_file_handler(httpd_req_t *req)
 	//int cursor = 0;
 	int tmp_size = 0;
     char tmp_buf[50];
+
+	// reset boundary state
+	calculate_data_lenght("123456", 6, "tt", 2);
 	do
 		{
 			/* Read the data for the request */
@@ -373,6 +376,9 @@ static esp_err_t upload_file_handler(httpd_req_t *req)
 				httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive file");
 				return ESP_FAIL;
 			}
+
+			ESP_LOGD(REST_TAG, "Received %d  bytes", recv_len);
+			ESP_LOGD(REST_TAG, "Buffer: %s", ota_buff);
 
 			//printf("OTA RX: %d of %d\r", content_received, content_length);
 			
@@ -397,10 +403,14 @@ static esp_err_t upload_file_handler(httpd_req_t *req)
 				body_start_p = strstr(ota_buff, "\r\n\r\n") + 4;	
 				data_len = recv_len - (body_start_p - ota_buff);
 				ESP_LOGI(REST_TAG, "File size: %d\r\n", content_length);
+				if (data_len == 0) {
+					continue;
+				}
 			}
+			ESP_LOGD(REST_TAG, "Data_len: %d", data_len);
    
 			int file_len = calculate_data_lenght(body_start_p, data_len, boundary_start_p, boundary_len);
-			printf("\nResult: %d\n", file_len);
+			printf("Result: %d, tmp_size=%d\n", file_len, tmp_size);
 			if (file_len == data_len && tmp_size > 0) {
 				ESP_LOGD(REST_TAG, "Save %d bytes from prev section", tmp_size);
 				/* Write buffer content to file on storage */
@@ -424,6 +434,19 @@ static esp_err_t upload_file_handler(httpd_req_t *req)
 				}
 			} else {
 				ESP_LOGD(REST_TAG, "File received no extra data nin buffer, break");
+				ESP_LOGD(REST_TAG, "Save %d bytes from prev section", tmp_size);
+				/* Write buffer content to file on storage */
+				if (tmp_size && (tmp_size != fwrite(tmp_buf, 1, tmp_size, fd))) {
+					/* Couldn't write everything to file!
+					* Storage may be full? */
+					fclose(fd);
+					unlink(tmp_filename);
+
+					ESP_LOGE(REST_TAG, "File write failed!");
+					/* Respond with 500 Internal Server Error */
+					httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write file to storage");
+					return ESP_FAIL;
+				}
 				break;
 			}
 			

@@ -20,6 +20,7 @@
 #include "esp_log.h"
 #include "esp_spiffs.h"
 #include "sdkconfig.h"
+#include "tcpip_adapter_types.h"
 
 //#include <time.h>
 //#include <sys/time.h>
@@ -41,7 +42,9 @@
 
 //#include <esp_https_server.h>
 
+
 static const char *TAG = "IOT DIN Module";
+static esp_netif_t *eth_netif = NULL;
 
 static void connect_handler(void* arg, esp_event_base_t event_base, 
                             int32_t event_id, void* event_data)
@@ -82,6 +85,7 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base,
         break;
     case ETHERNET_EVENT_START:
         ESP_LOGI(TAG, "Ethernet Started");
+        esp_netif_set_hostname(eth_netif, "iot-module");
         break;
     case ETHERNET_EVENT_STOP:
         ESP_LOGI(TAG, "Ethernet Stopped");
@@ -162,7 +166,7 @@ void app_main(void)
     // Create default event loop that running in background
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_config_t cfg = ESP_NETIF_DEFAULT_ETH();
-    esp_netif_t *eth_netif = esp_netif_new(&cfg);
+    eth_netif = esp_netif_new(&cfg);
     // Set default handlers to process TCP/IP stuffs
     ESP_ERROR_CHECK(esp_eth_set_default_handlers(eth_netif));
     // Register user defined event handers
