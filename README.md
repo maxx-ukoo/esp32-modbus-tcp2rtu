@@ -27,4 +27,6 @@ idf.py -p COMX flash
 [Bootstrap](https://www.turtle-techies.com/post/react-navbar-with-bootstrap-4/)
 [IEEE754 converter](https://www.h-schmidt.net/FloatConverter/IEEE754.html)
 [OTA](https://github.com/versamodule/ESP32-OTA-Webserver/blob/master/OTAServer.c)
+[ESP32 pins reference](https://randomnerdtutorials.com/esp32-pinout-reference-gpios/)
+
 Copyright (C) 2019 Maksym Krasovskyi

@@ -63,7 +63,11 @@ esp_err_t component_control_post_handler(httpd_req_t *req)
     }
     else if (strcmp(api_component_name, "state") == 0)
     {
-        return system_reboot_post_handler(req, buf);
+        return gpio_control_state_post_handler(req, buf);
+    }
+    else if (strcmp(api_component_name, "level") == 0)
+    {
+        return gpio_control_level_post_handler(req, buf);
     }
     char resp[40];
     sprintf(resp, "Unknown component: %.20s", api_component_name);
@@ -226,6 +230,21 @@ static esp_err_t gpio_control_state_post_handler(httpd_req_t *req, char * buf) {
     int state = cJSON_GetObjectItem(json_body, "state")->valueint;
     ESP_LOGI(TAG, "Update gpio state: pin = %d, state = %d", pin, state);
     cJSON *res =  setPinState(pin, state);
+    const char *resp_body = cJSON_Print(res);
+    httpd_resp_sendstr(req, resp_body);
+    free((void *)resp_body);
+    cJSON_Delete(json_body);
+    cJSON_Delete(res);
+    return ESP_OK;
+}
+
+
+static esp_err_t gpio_control_level_post_handler(httpd_req_t *req, char * buf) {
+    cJSON *json_body = cJSON_Parse(buf);
+    int pin = cJSON_GetObjectItem(json_body, "pin")->valueint;
+    int level = cJSON_GetObjectItem(json_body, "level")->valueint;
+    ESP_LOGI(TAG, "Update gpio state: pin = %d, level = %d", pin, level);
+    cJSON *res =  setPinState(pin, level);
     const char *resp_body = cJSON_Print(res);
     httpd_resp_sendstr(req, resp_body);
     free((void *)resp_body);

@@ -28,6 +28,7 @@ static esp_err_t mqtt_control_post_handler(httpd_req_t *req, char * buf);
 static esp_err_t gpio_control_post_handler(httpd_req_t *req, char * buf);
 static esp_err_t system_reboot_post_handler(httpd_req_t *req, char * buf);
 static esp_err_t gpio_control_state_post_handler(httpd_req_t *req, char * buf);
+static esp_err_t gpio_control_level_post_handler(httpd_req_t *req, char * buf);
 esp_err_t system_info_get_handler(httpd_req_t *req);
 esp_err_t gpio_control_state_get_handler(httpd_req_t *req);
 

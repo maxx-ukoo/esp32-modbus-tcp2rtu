@@ -13,7 +13,12 @@
 #define MODE 1
 #define PULL_U 2
 #define PULL_D 3
-#define MODE_MAX 4
+#define SUPPORTED_MODES 4
+
+
+#define MODE_INPUT 1
+#define MODE_OUTPUT 2
+#define MODE_PWM 4
 
 #ifndef GPIO_H
 #define GPIO_H

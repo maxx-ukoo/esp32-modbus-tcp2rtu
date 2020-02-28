@@ -1,5 +1,6 @@
 #include "gpio.h"
 #include "driver/gpio.h"
+#include "driver/ledc.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -7,27 +8,24 @@
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #include "esp_log.h"
 
-
-
 static const char *GPIO_TAG = "GPIO Tag";
 
-// {id, mode 0/1 (0 - input, 1 - output), pullup, pulldown, maxmode}
 static int gpioConfig[GPIO_NUMBER][5] = {
-    {2, -1, 0, 0, 1},
-    {4, -1, 0, 0, 1},
-    {5, -1, 0, 0, 1},
-    {12, -1, 0, 0, 1},
-    {13, -1, 0, 0, 1},
-    {14, -1, 0, 0, 1},
-    {15, -1, 0, 0, 1},
-    {18, -1, 0, 0, 1},
-    {23, -1, 0, 0, 1},
-    {32, -1, 0, 0, 1},
-    {33, -1, 0, 0, 1},
-    {34, -1, 0, 0, 0},
-    {35, -1, 0, 0, 0},
-    {36, -1, 0, 0, 0},
-    {39, -1, 0, 0, 0}
+    {2, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
+    {4, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
+    {5, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
+    {12, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
+    {13, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
+    {14, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
+    {15, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
+    {18, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
+    {23, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
+    {32, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
+    {33, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
+    {34, -1, 0, 0, MODE_INPUT},
+    {35, -1, 0, 0, MODE_INPUT},
+    {36, -1, 0, 0, MODE_INPUT},
+    {39, -1, 0, 0, MODE_INPUT}
 };
 
 static xQueueHandle gpio_evt_queue = NULL;
@@ -37,6 +35,27 @@ static TaskHandle_t mqtt2gpio_task_xHandle = NULL;
 static esp_err_t esr_service_status = ESP_FAIL;
 static xQueueHandle gpio2mqtt_queue = NULL;
 static xQueueHandle mqtt2gpio_queue = NULL;
+
+
+static ledc_channel_config_t ledc_channel = 
+        {
+            .channel    = LEDC_CHANNEL_0,
+            .duty       = 0,
+            .gpio_num   = 0,
+            .speed_mode = LEDC_HIGH_SPEED_MODE,
+            .hpoint     = 0,
+            .timer_sel  = LEDC_TIMER_0
+        };
+
+ledc_timer_config_t ledc_timer = {
+    .duty_resolution = LEDC_TIMER_13_BIT, // resolution of PWM duty
+    .freq_hz = 5000,                      // frequency of PWM signal
+    .speed_mode = LEDC_HIGH_SPEED_MODE,   // timer mode
+    .timer_num = LEDC_TIMER_0,            // timer index
+    .clk_cfg = LEDC_AUTO_CLK,             // Auto select the source clock
+};
+
+//ledc_timer_config(&ledc_timer);
 
 static void IRAM_ATTR gpio_isr_handler(void* arg)
 {
@@ -116,23 +135,28 @@ static esp_err_t gpioInit() {
     for (int i = 0; i < GPIO_NUMBER; ++i) {
         gpio_isr_handler_remove(gpioConfig[i][ID]);
         if (gpioConfig[i][MODE] != -1) {
-            if (gpioConfig[i][MODE] == 0)
+            if (gpioConfig[i][MODE] == MODE_INPUT) {
                 io_conf.intr_type = GPIO_INTR_ANYEDGE;
-            else
-                io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
-            if (gpioConfig[i][MODE] == 0)
                 io_conf.mode = GPIO_MODE_INPUT;
-            else
+            }
+            if (gpioConfig[i][MODE] == MODE_OUTPUT) {
+                io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
                 io_conf.mode = GPIO_MODE_OUTPUT;
+            }
+            if ((gpioConfig[i][MODE] & (MODE_OUTPUT | MODE_INPUT)) != 0) {
+                io_conf.pin_bit_mask = (1ULL<<gpioConfig[i][ID]);
+                io_conf.pull_down_en = gpioConfig[i][PULL_D];
+                io_conf.pull_up_en = gpioConfig[i][PULL_U];
+                gpio_config(&io_conf);
+                gpio_isr_handler_add(gpioConfig[i][ID], gpio_isr_handler, (void*) gpioConfig[i][ID]);
+            }
+            if (gpioConfig[i][MODE] == MODE_PWM) {
+                ledc_timer_config(&ledc_timer);
+                ledc_channel.gpio_num = gpioConfig[i][ID];
+                ledc_channel_config(&ledc_channel);
+            }
 
-            io_conf.pin_bit_mask = (1ULL<<gpioConfig[i][ID]);
-            io_conf.pull_down_en = gpioConfig[i][PULL_D];
-            io_conf.pull_up_en = gpioConfig[i][PULL_U];
-            gpio_config(&io_conf);
             
-            //hook isr handler for specific gpio pin
-
-            gpio_isr_handler_add(gpioConfig[i][ID], gpio_isr_handler, (void*) gpioConfig[i][ID]);
         }
     }
     ESP_LOGD(GPIO_TAG, "All pins configured");
@@ -147,8 +171,8 @@ static bool configurePin(int id, int mode, int pull_up, int pull_down) {
         return false;
     }
     ESP_LOGD(GPIO_TAG, "configurePin: mode=%d", mode);
-    ESP_LOGD(GPIO_TAG, "configurePin: max_mode=%d", gpioConfig[idx][MODE_MAX]);
-    if (mode > gpioConfig[idx][MODE_MAX]) {
+    ESP_LOGD(GPIO_TAG, "configurePin: max_mode=%d", gpioConfig[idx][SUPPORTED_MODES]);
+    if ((mode & gpioConfig[idx][SUPPORTED_MODES]) == 0) {
         return false;
     }
     gpioConfig[idx][MODE] = mode;
@@ -243,12 +267,18 @@ cJSON * setPinState(int pin, int state) {
         cJSON_AddNumberToObject(root, "error_no_pin", 1);
     }
     cJSON_AddNumberToObject(root, "pin", pin);
-    if (gpioConfig[idx][MODE] != 1) {
+    if (gpioConfig[idx][MODE] == MODE_OUTPUT) {
+        gpio_set_level(pin, state);
+        cJSON_AddNumberToObject(root, "state", state);
+        
+    } else if (gpioConfig[idx][MODE_PWM] == MODE_OUTPUT) {
+        ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, 0);
+        ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);
+
+    } else {
         cJSON_AddNumberToObject(root, "error_wrong_mode", 1);
     }
 
-    gpio_set_level(pin, state);
-    cJSON_AddNumberToObject(root, "state", state);
     return root;
 }
 
