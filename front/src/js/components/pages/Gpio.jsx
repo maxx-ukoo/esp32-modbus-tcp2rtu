@@ -9,6 +9,7 @@ class Gpio  extends Component {
     this.state = {
       config: []
     }
+    this.sliderTimeout = null;
     this.handleModeChange = this.handleModeChange.bind(this);
     this.handlePullUpChange = this.handlePullUpChange.bind(this);
     this.handlePullDownChange = this.handlePullDownChange.bind(this);
@@ -76,14 +77,18 @@ class Gpio  extends Component {
 
   handleSliderStateChange(e) {
     let id = e.target.id.replace("sl", "");
-    axios.post('/api/gpio/level', {
-      pin: Number(id),
-      level: Number(e.target.value)
-    })
-    .then(res => {
-      //console.log(res.data);
-    })
-}
+    let value = e.target.value;
+    this.sliderTimeout && clearTimeout(this.sliderTimeout);    
+    this.sliderTimeout = setTimeout(() => {
+      axios.post('/api/gpio/level', {
+        pin: Number(id),
+        level: Number(value)
+      })
+      .then(res => {
+        //console.log(res.data);
+      })
+    }, 1000);
+  }
 
   handleApplyChanges() {
     axios.post('/api/gpio', {
@@ -106,7 +111,7 @@ class Gpio  extends Component {
     if (item.mode == 4) {
       return (
         <div className="slidecontainer">
-          <input type="range" min="1" max="1024" value={item.value} className="slider" id={"sl" + item.id} onChange={this.handleSliderStateChange}/>
+          <input type="range" min="1" max="8191" value={item.value} className="slider" id={"sl" + item.id} onChange={this.handleSliderStateChange}/>
         </div>
       )
     }

@@ -133,8 +133,9 @@ static esp_err_t gpioInit() {
     }
 
     for (int i = 0; i < GPIO_NUMBER; ++i) {
+        ESP_LOGD(GPIO_TAG, "GPIO[%d] configuring as %d", gpioConfig[i][ID], gpioConfig[i][MODE]);
         gpio_isr_handler_remove(gpioConfig[i][ID]);
-        if (gpioConfig[i][MODE] != -1) {
+        if (gpioConfig[i][MODE] > 0) {
             if (gpioConfig[i][MODE] == MODE_INPUT) {
                 io_conf.intr_type = GPIO_INTR_ANYEDGE;
                 io_conf.mode = GPIO_MODE_INPUT;
@@ -151,9 +152,11 @@ static esp_err_t gpioInit() {
                 gpio_isr_handler_add(gpioConfig[i][ID], gpio_isr_handler, (void*) gpioConfig[i][ID]);
             }
             if (gpioConfig[i][MODE] == MODE_PWM) {
+                ESP_LOGD(GPIO_TAG, "GPIO[%d] configuring as PWM", gpioConfig[i][ID]);
                 ledc_timer_config(&ledc_timer);
                 ledc_channel.gpio_num = gpioConfig[i][ID];
                 ledc_channel_config(&ledc_channel);
+                ESP_LOGD(GPIO_TAG, "GPIO[%d] configuring as PWM DONE", gpioConfig[i][ID]);
             }
 
             
@@ -261,6 +264,7 @@ end:
 }
 
 cJSON * setPinState(int pin, int state) {
+    ESP_LOGI(GPIO_TAG, "Update gpio state: pin = %d, level = %d", pin, state);
     int idx = getPinIndex(pin);
     cJSON *root = cJSON_CreateObject();
     if (idx == -1) {
@@ -270,11 +274,9 @@ cJSON * setPinState(int pin, int state) {
     if (gpioConfig[idx][MODE] == MODE_OUTPUT) {
         gpio_set_level(pin, state);
         cJSON_AddNumberToObject(root, "state", state);
-        
-    } else if (gpioConfig[idx][MODE_PWM] == MODE_OUTPUT) {
-        ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, 0);
+    } else if (gpioConfig[idx][MODE] == MODE_PWM) {
+        ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, state);
         ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);
-
     } else {
         cJSON_AddNumberToObject(root, "error_wrong_mode", 1);
     }
