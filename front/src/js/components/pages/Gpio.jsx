@@ -111,7 +111,7 @@ class Gpio  extends Component {
     if (item.mode == 4) {
       return (
         <div className="slidecontainer">
-          <input type="range" min="1" max="8191" value={item.value} className="slider" id={"sl" + item.id} onChange={this.handleSliderStateChange}/>
+          <input type="range" min="0" max="1023" value={item.value} className="slider" id={"sl" + item.id} onChange={this.handleSliderStateChange}/>
         </div>
       )
     }

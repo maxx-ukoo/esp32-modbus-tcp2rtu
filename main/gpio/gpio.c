@@ -48,8 +48,8 @@ static ledc_channel_config_t ledc_channel =
         };
 
 ledc_timer_config_t ledc_timer = {
-    .duty_resolution = LEDC_TIMER_13_BIT, // resolution of PWM duty
-    .freq_hz = 5000,                      // frequency of PWM signal
+    .duty_resolution = LEDC_TIMER_10_BIT, // resolution of PWM duty
+    .freq_hz = 64000,                      // frequency of PWM signal
     .speed_mode = LEDC_HIGH_SPEED_MODE,   // timer mode
     .timer_num = LEDC_TIMER_0,            // timer index
     .clk_cfg = LEDC_AUTO_CLK,             // Auto select the source clock
@@ -70,12 +70,38 @@ static void mqtt2gpio_task(void* arg)
         if (mqtt2gpio_queue != NULL) {
             if(xQueueReceive(mqtt2gpio_queue, &msg, portMAX_DELAY)) {
                 ESP_LOGD(GPIO_TAG, "MQTT2GPIO received GPIO[%d] intr, val:%d", msg.pin, msg.state);
-                gpio_set_level(msg.pin, msg.state);
+                setPinState(msg.pin, msg.state);
             }
         } else {
             vTaskDelay(50);
         }
     }
+}
+
+static int getPinIndex(int id) {
+    for (int i = 0; i < GPIO_NUMBER; ++i) {
+        if (gpioConfig[i][ID] == id)
+            return i;
+    }
+    return -1;
+}
+
+esp_err_t setPinState(int pin, int state) {
+    ESP_LOGI(GPIO_TAG, "Set gpio state: pin = %d, level = %d", pin, state);
+    int idx = getPinIndex(pin);
+    if (idx == -1) {
+        return ESP_FAIL;
+    }
+    if (gpioConfig[idx][MODE] == MODE_OUTPUT) {
+        gpio_set_level(pin, state);
+        return ESP_OK;
+    } else if (gpioConfig[idx][MODE] == MODE_PWM) {
+        ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, state);
+        ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);
+        return ESP_OK;
+    }
+
+    return ESP_FAIL;
 }
 
 void set_mqtt_gpio_evt_queue(xQueueHandle gpio2mqtt_queue_handler, xQueueHandle mqtt2gpio_queue_handler){
@@ -105,14 +131,6 @@ static void gpio_task(void* arg)
             }
         }
     }
-}
-
-static int getPinIndex(int id) {
-    for (int i = 0; i < GPIO_NUMBER; ++i) {
-        if (gpioConfig[i][ID] == id)
-            return i;
-    }
-    return -1;
 }
 
 static esp_err_t gpioInit() {
@@ -261,27 +279,6 @@ end:
     ESP_LOGE(GPIO_TAG, "Error on creating gpio config");
     cJSON_Delete(gpio);
     return NULL;
-}
-
-cJSON * setPinState(int pin, int state) {
-    ESP_LOGI(GPIO_TAG, "Update gpio state: pin = %d, level = %d", pin, state);
-    int idx = getPinIndex(pin);
-    cJSON *root = cJSON_CreateObject();
-    if (idx == -1) {
-        cJSON_AddNumberToObject(root, "error_no_pin", 1);
-    }
-    cJSON_AddNumberToObject(root, "pin", pin);
-    if (gpioConfig[idx][MODE] == MODE_OUTPUT) {
-        gpio_set_level(pin, state);
-        cJSON_AddNumberToObject(root, "state", state);
-    } else if (gpioConfig[idx][MODE] == MODE_PWM) {
-        ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, state);
-        ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);
-    } else {
-        cJSON_AddNumberToObject(root, "error_wrong_mode", 1);
-    }
-
-    return root;
 }
 
 cJSON * getPinState(int pin) {

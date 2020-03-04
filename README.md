@@ -22,6 +22,17 @@ idf.py build
 idf.py -p COMX flash
 ```
 
+# Debug usage
+## Set state
+TOPIC: /HOST/gpio/command
+{
+  "pin": 23,
+  "state": 5
+}
+
+## Upload file via CURL
+curl -k -vvv -F upload=@/mnt/d/Projects/wesp32/esp32-modbus-tcp2rtu/front/dist/main.test.gz https://192.168.0.42/ota/upload/file
+
 ## Links
 [Setup webapp](https://www.valentinog.com/blog/babel/)
 [Bootstrap](https://www.turtle-techies.com/post/react-navbar-with-bootstrap-4/)

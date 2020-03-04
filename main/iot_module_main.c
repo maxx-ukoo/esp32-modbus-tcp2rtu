@@ -85,7 +85,11 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base,
         break;
     case ETHERNET_EVENT_START:
         ESP_LOGI(TAG, "Ethernet Started");
-        esp_netif_set_hostname(eth_netif, "iot-module");
+        cJSON *config = readConfig();
+        cJSON *mqtt = cJSON_GetObjectItem(config, "mqtt");
+        ESP_LOGI(TAG, "Set hostname to %s", cJSON_GetObjectItem(mqtt, "host")->valuestring);
+        esp_netif_set_hostname(eth_netif, cJSON_GetObjectItem(mqtt, "host")->valuestring);
+        cJSON_Delete(config);
         break;
     case ETHERNET_EVENT_STOP:
         ESP_LOGI(TAG, "Ethernet Stopped");
@@ -142,6 +146,8 @@ esp_err_t init_fs(void)
     return ESP_OK;
 }
 
+
+
 void components_start(void) {
     cJSON *config = readConfig();
     cJSON *modbus = cJSON_GetObjectItem(config, "modbus");
@@ -160,7 +166,7 @@ void components_start(void) {
 void app_main(void)
 {
     static httpd_handle_t server = NULL;
-
+    ESP_ERROR_CHECK(init_fs());
     // Initialize TCP/IP network interface (should be called only once in application)
     ESP_ERROR_CHECK(esp_netif_init());
     // Create default event loop that running in background
@@ -191,7 +197,7 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_attach(eth_netif, esp_eth_new_netif_glue(eth_handle)));
     /* start Ethernet driver state machine */
     ESP_ERROR_CHECK(esp_eth_start(eth_handle));
-    ESP_ERROR_CHECK(init_fs());
+    
     components_start();
 
     xTaskCreate(&ota_system_reboot_task, "ota_system_reboot_task", 2048, NULL, 5, NULL);

@@ -37,7 +37,7 @@ module.exports = {
     new MiniCssExtractPlugin(),
     new CompressionPlugin({
       test: /\.(js|css)$/,
-      deleteOriginalAssets: false,
+      deleteOriginalAssets: true,
     })
   ]
 };

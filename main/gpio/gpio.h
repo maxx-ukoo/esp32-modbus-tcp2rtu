@@ -33,7 +33,7 @@ typedef struct {
 int gpioInitFromJson(cJSON *gpio);
 cJSON * getGpioConfig();
 cJSON * getPinState(int pin);
-cJSON * setPinState(int pin, int state);
+esp_err_t setPinState(int pin, int state);
 void set_mqtt_gpio_evt_queue(xQueueHandle gpio2mqtt_queue_handler, xQueueHandle mqtt2gpio_queue_handler);
 
 #endif /* GPIO_H */

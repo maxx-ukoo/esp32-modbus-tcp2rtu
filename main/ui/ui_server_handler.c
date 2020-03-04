@@ -228,7 +228,8 @@ static esp_err_t gpio_control_state_post_handler(httpd_req_t *req, char * buf) {
     cJSON *json_body = cJSON_Parse(buf);
     int pin = cJSON_GetObjectItem(json_body, "pin")->valueint;
     int state = cJSON_GetObjectItem(json_body, "state")->valueint;
-    cJSON *res =  setPinState(pin, state);
+    cJSON *res = cJSON_CreateObject();
+    cJSON_AddNumberToObject(res, "result", setPinState(pin, state));
     const char *resp_body = cJSON_Print(res);
     httpd_resp_sendstr(req, resp_body);
     free((void *)resp_body);
@@ -242,7 +243,8 @@ static esp_err_t gpio_control_level_post_handler(httpd_req_t *req, char * buf) {
     cJSON *json_body = cJSON_Parse(buf);
     int pin = cJSON_GetObjectItem(json_body, "pin")->valueint;
     int level = cJSON_GetObjectItem(json_body, "level")->valueint;
-    cJSON *res =  setPinState(pin, level);
+    cJSON *res = cJSON_CreateObject();
+    cJSON_AddNumberToObject(res, "result", setPinState(pin, level));
     const char *resp_body = cJSON_Print(res);
     httpd_resp_sendstr(req, resp_body);
     free((void *)resp_body);
