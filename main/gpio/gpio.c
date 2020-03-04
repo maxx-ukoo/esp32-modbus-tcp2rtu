@@ -32,6 +32,7 @@ static xQueueHandle gpio_evt_queue = NULL;
 static TaskHandle_t gpio_task_xHandle = NULL;
 static TaskHandle_t mqtt2gpio_task_xHandle = NULL;
 
+static esp_err_t fade_service_status = ESP_FAIL;
 static esp_err_t esr_service_status = ESP_FAIL;
 static xQueueHandle gpio2mqtt_queue = NULL;
 static xQueueHandle mqtt2gpio_queue = NULL;
@@ -40,7 +41,7 @@ static xQueueHandle mqtt2gpio_queue = NULL;
 static ledc_channel_config_t ledc_channel = 
         {
             .channel    = LEDC_CHANNEL_0,
-            .duty       = 0,
+            .duty       = 1023,
             .gpio_num   = 0,
             .speed_mode = LEDC_HIGH_SPEED_MODE,
             .hpoint     = 0,
@@ -148,6 +149,10 @@ static esp_err_t gpioInit() {
         ESP_LOGD(GPIO_TAG, "instaling isr service");
         esr_service_status = gpio_install_isr_service(0);
         ESP_LOGD(GPIO_TAG, "installed");
+    }
+
+    if (fade_service_status != ESP_OK) {
+        fade_service_status = ledc_fade_func_install(1);
     }
 
     for (int i = 0; i < GPIO_NUMBER; ++i) {
@@ -281,6 +286,29 @@ end:
     return NULL;
 }
 
+cJSON * setPinState(int pin, int state) {
+    ESP_LOGI(GPIO_TAG, "Update gpio state: pin = %d, level = %d", pin, state);
+    int idx = getPinIndex(pin);
+    cJSON *root = cJSON_CreateObject();
+    if (idx == -1) {
+        cJSON_AddNumberToObject(root, "error_no_pin", 1);
+    }
+    cJSON_AddNumberToObject(root, "pin", pin);
+    if (gpioConfig[idx][MODE] == MODE_OUTPUT) {
+        gpio_set_level(pin, state);
+        cJSON_AddNumberToObject(root, "state", state);
+    } else if (gpioConfig[idx][MODE] == MODE_PWM) {
+        //ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, state);
+        //ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);
+        ledc_set_fade_with_time(ledc_channel.speed_mode, ledc_channel.channel, state, 1000);
+        ledc_fade_start(ledc_channel.speed_mode,ledc_channel.channel, LEDC_FADE_NO_WAIT);
+    } else {
+        cJSON_AddNumberToObject(root, "error_wrong_mode", 1);
+    }
+
+    return root;
+}
+
 cJSON * getPinState(int pin) {
     int idx = getPinIndex(pin);
     cJSON *root = cJSON_CreateObject();
@@ -288,11 +316,20 @@ cJSON * getPinState(int pin) {
         cJSON_AddNumberToObject(root, "error_no_pin", 1);
     }
     cJSON_AddNumberToObject(root, "pin", pin);
+    int state = -1;
     if (gpioConfig[idx][MODE] != 0) {
         cJSON_AddNumberToObject(root, "error_wrong_mode", 1);
     }
 
-    cJSON_AddNumberToObject(root, "state", gpio_get_level(pin));
+    if (gpioConfig[idx][MODE] == MODE_OUTPUT) {
+        state = gpio_get_level(pin);
+    } else if (gpioConfig[idx][MODE] == MODE_PWM) {
+        state = ledc_get_duty(ledc_channel.speed_mode, ledc_channel.channel);
+    } else {
+        cJSON_AddNumberToObject(root, "error_wrong_mode", 1);
+    }
+
+    cJSON_AddNumberToObject(root, "state", state);
     return root;
 }
 
