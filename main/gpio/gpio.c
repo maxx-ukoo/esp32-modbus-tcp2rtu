@@ -97,8 +97,10 @@ esp_err_t setPinState(int pin, int state) {
         gpio_set_level(pin, state);
         return ESP_OK;
     } else if (gpioConfig[idx][MODE] == MODE_PWM) {
-        ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, state);
-        ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);
+        //ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, state);
+        //ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);
+        ledc_set_fade_with_time(ledc_channel.speed_mode, ledc_channel.channel, state, 1000);
+        ledc_fade_start(ledc_channel.speed_mode,ledc_channel.channel, LEDC_FADE_NO_WAIT);
         return ESP_OK;
     }
 
@@ -286,28 +288,7 @@ end:
     return NULL;
 }
 
-cJSON * setPinState(int pin, int state) {
-    ESP_LOGI(GPIO_TAG, "Update gpio state: pin = %d, level = %d", pin, state);
-    int idx = getPinIndex(pin);
-    cJSON *root = cJSON_CreateObject();
-    if (idx == -1) {
-        cJSON_AddNumberToObject(root, "error_no_pin", 1);
-    }
-    cJSON_AddNumberToObject(root, "pin", pin);
-    if (gpioConfig[idx][MODE] == MODE_OUTPUT) {
-        gpio_set_level(pin, state);
-        cJSON_AddNumberToObject(root, "state", state);
-    } else if (gpioConfig[idx][MODE] == MODE_PWM) {
-        //ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, state);
-        //ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);
-        ledc_set_fade_with_time(ledc_channel.speed_mode, ledc_channel.channel, state, 1000);
-        ledc_fade_start(ledc_channel.speed_mode,ledc_channel.channel, LEDC_FADE_NO_WAIT);
-    } else {
-        cJSON_AddNumberToObject(root, "error_wrong_mode", 1);
-    }
 
-    return root;
-}
 
 cJSON * getPinState(int pin) {
     int idx = getPinIndex(pin);
