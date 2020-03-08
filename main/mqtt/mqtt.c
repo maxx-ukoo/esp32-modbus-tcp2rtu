@@ -92,6 +92,7 @@ static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
             cJSON *data = cJSON_Parse(event->data);
             int pin = cJSON_GetObjectItem(data, "pin")->valueint;
             int state = cJSON_GetObjectItem(data, "state")->valueint;
+            cJSON_Delete(data);
             ESP_LOGI(TAG, "MQTT2GPIO_EVENT, pinn=%d, state=%d", pin, state);
             pin_state_msg_t msg = {
                 .pin = pin,
