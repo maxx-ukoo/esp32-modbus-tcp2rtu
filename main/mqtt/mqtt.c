@@ -17,6 +17,7 @@ static esp_mqtt_client_handle_t client = NULL;
 static char* mqtt2gpio_topic = NULL;
 xQueueHandle gpio2mqtt_queue = NULL;
 xQueueHandle mqtt2gpio_queue = NULL;
+static TaskHandle_t health_status_task_handle = NULL;
 
 static mqtt_config_t init_with_default_config() {
     mqtt_config_t config = {
@@ -161,6 +162,20 @@ static esp_err_t subscribe_to_gpio() {
     return ESP_OK;
 }
 
+void health_status_task(void *pvParameter)
+{
+    const TickType_t xDelay30s = pdMS_TO_TICKS(30000);
+    while(1) {
+        vTaskDelay(xDelay30s);
+        ESP_LOGD(TAG, "MQTT status updating");
+        char topic[50];
+        snprintf(topic, sizeof topic, "/%s/module/state", mqtt_module_config.host);
+        int msg_id = esp_mqtt_client_publish(client, topic, "OK", 0, 0, 0);
+        ESP_LOGD(TAG, "MQTT status updated");
+    }
+    vTaskDelete(NULL);
+}
+
 static esp_err_t start_mqtt_client() {
     if (client != NULL) {
         ESP_LOGD(TAG, "Stop existing client");
@@ -174,10 +189,12 @@ static esp_err_t start_mqtt_client() {
     esp_err_t ret = esp_mqtt_client_start(client);
     if (ret == ESP_OK) {
         subscribe_to_gpio();
+        if (health_status_task_handle == NULL) {
+            xTaskCreate(&health_status_task, "health_status_task", 10000, NULL, 5, NULL);
+        }
     }
     return ret;
 }
-
 
 cJSON * get_mqtt_config() {
     if (mqtt_module_config.broker == NULL) {
@@ -192,3 +209,5 @@ cJSON * get_mqtt_config() {
     cJSON_AddStringToObject(config, "host", mqtt_module_config.host);
     return config;
 }
+
+
