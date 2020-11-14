@@ -14,6 +14,7 @@
 #define PULL_U 2
 #define PULL_D 3
 #define SUPPORTED_MODES 4
+#define PWM_CHANNEL 5
 
 
 #define MODE_INPUT 1

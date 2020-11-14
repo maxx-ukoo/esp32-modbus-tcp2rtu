@@ -10,22 +10,22 @@
 
 static const char *GPIO_TAG = "GPIO Tag";
 
-static int gpioConfig[GPIO_NUMBER][5] = {
-    {2, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
-    {4, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
-    {5, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
-    {12, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
-    {13, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
-    {14, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
-    {15, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
-    {18, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
-    {23, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
-    {32, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
-    {33, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM},
-    {34, -1, 0, 0, MODE_INPUT},
-    {35, -1, 0, 0, MODE_INPUT},
-    {36, -1, 0, 0, MODE_INPUT},
-    {39, -1, 0, 0, MODE_INPUT}
+static int gpioConfig[GPIO_NUMBER][6] = {
+    {2, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM, 0},
+    {4, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM, 0},
+    {5, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM, 0},
+    {12, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM, 0},
+    {13, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM, 0},
+    {14, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM, 0},
+    {15, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM, 0},
+    {18, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM, 0},
+    {23, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM, 0},
+    {32, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM, 0},
+    {33, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM, 0},
+    {34, -1, 0, 0, MODE_INPUT, 0},
+    {35, -1, 0, 0, MODE_INPUT, 0},
+    {36, -1, 0, 0, MODE_INPUT, 0},
+    {39, -1, 0, 0, MODE_INPUT, 0}
 };
 
 static xQueueHandle gpio_evt_queue = NULL;
@@ -37,8 +37,9 @@ static esp_err_t esr_service_status = ESP_FAIL;
 static xQueueHandle gpio2mqtt_queue = NULL;
 static xQueueHandle mqtt2gpio_queue = NULL;
 
+//https://rntlab.com/question/esp32-two-frequency-pwm-output/
 
-static ledc_channel_config_t ledc_channel = 
+static ledc_channel_config_t ledc_channel1 = 
         {
             .channel    = LEDC_CHANNEL_0,
             .duty       = 1023,
@@ -48,11 +49,29 @@ static ledc_channel_config_t ledc_channel =
             .timer_sel  = LEDC_TIMER_0
         };
 
-ledc_timer_config_t ledc_timer = {
+static ledc_channel_config_t ledc_channel2 = 
+        {
+            .channel    = LEDC_CHANNEL_2,
+            .duty       = 1023,
+            .gpio_num   = 0,
+            .speed_mode = LEDC_HIGH_SPEED_MODE,
+            .hpoint     = 0,
+            .timer_sel  = LEDC_TIMER_1
+        };        
+
+ledc_timer_config_t ledc_timer1 = {
     .duty_resolution = LEDC_TIMER_10_BIT, // resolution of PWM duty
     .freq_hz = 64000,                      // frequency of PWM signal
     .speed_mode = LEDC_HIGH_SPEED_MODE,   // timer mode
-    .timer_num = LEDC_TIMER_0,            // timer index
+    .timer_num = LEDC_TIMER_1,            // timer index
+    .clk_cfg = LEDC_AUTO_CLK,             // Auto select the source clock
+};
+
+ledc_timer_config_t ledc_timer2 = {
+    .duty_resolution = LEDC_TIMER_10_BIT, // resolution of PWM duty
+    .freq_hz = 64000,                      // frequency of PWM signal
+    .speed_mode = LEDC_HIGH_SPEED_MODE,   // timer mode
+    .timer_num = LEDC_TIMER_2,            // timer index
     .clk_cfg = LEDC_AUTO_CLK,             // Auto select the source clock
 };
 
@@ -99,8 +118,13 @@ esp_err_t setPinState(int pin, int state) {
     } else if (gpioConfig[idx][MODE] == MODE_PWM) {
         //ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, state);
         //ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);
-        ledc_set_fade_with_time(ledc_channel.speed_mode, ledc_channel.channel, state, 1000);
-        ledc_fade_start(ledc_channel.speed_mode,ledc_channel.channel, LEDC_FADE_NO_WAIT);
+        if (gpioConfig[idx][PWM_CHANNEL] == 1) {
+            ledc_set_fade_with_time(ledc_channel1.speed_mode, ledc_channel1.channel, state, 1000);
+            ledc_fade_start(ledc_channel1.speed_mode,ledc_channel1.channel, LEDC_FADE_NO_WAIT);
+        } else {
+            ledc_set_fade_with_time(ledc_channel2.speed_mode, ledc_channel2.channel, state, 1000);
+            ledc_fade_start(ledc_channel2.speed_mode,ledc_channel2.channel, LEDC_FADE_NO_WAIT);
+        }
         return ESP_OK;
     }
 
@@ -157,6 +181,7 @@ static esp_err_t gpioInit() {
         fade_service_status = ledc_fade_func_install(1);
     }
 
+    int pwm_count = 0;
     for (int i = 0; i < GPIO_NUMBER; ++i) {
         ESP_LOGD(GPIO_TAG, "GPIO[%d] configuring as %d", gpioConfig[i][ID], gpioConfig[i][MODE]);
         gpio_isr_handler_remove(gpioConfig[i][ID]);
@@ -178,9 +203,18 @@ static esp_err_t gpioInit() {
             }
             if (gpioConfig[i][MODE] == MODE_PWM) {
                 ESP_LOGD(GPIO_TAG, "GPIO[%d] configuring as PWM", gpioConfig[i][ID]);
-                ledc_timer_config(&ledc_timer);
-                ledc_channel.gpio_num = gpioConfig[i][ID];
-                ledc_channel_config(&ledc_channel);
+                if (pwm_count == 0) {
+                    ledc_timer_config(&ledc_timer1);
+                    ledc_channel1.gpio_num = gpioConfig[i][ID];
+                    ledc_channel_config(&ledc_channel1);
+                    gpioConfig[i][PWM_CHANNEL] = 1;
+                    pwm_count++;
+                } else {
+                    ledc_timer_config(&ledc_timer2);
+                    ledc_channel2.gpio_num = gpioConfig[i][ID];
+                    ledc_channel_config(&ledc_channel2);
+                    gpioConfig[i][PWM_CHANNEL] = 2;
+                }
                 ESP_LOGD(GPIO_TAG, "GPIO[%d] configuring as PWM DONE", gpioConfig[i][ID]);
             }
 
@@ -305,7 +339,7 @@ cJSON * getPinState(int pin) {
     if (gpioConfig[idx][MODE] == MODE_OUTPUT) {
         state = gpio_get_level(pin);
     } else if (gpioConfig[idx][MODE] == MODE_PWM) {
-        state = ledc_get_duty(ledc_channel.speed_mode, ledc_channel.channel);
+        state = ledc_get_duty(ledc_channel1.speed_mode, ledc_channel1.channel);
     } else {
         cJSON_AddNumberToObject(root, "error_wrong_mode", 1);
     }
