@@ -131,20 +131,11 @@ httpd_handle_t ui_http_webserver_start(const char *base_path)
     // Start the httpd server
     ESP_LOGI(REST_TAG, "Starting server");
 
-    httpd_ssl_config_t conf = HTTPD_SSL_CONFIG_DEFAULT();
-    conf.httpd.uri_match_fn = httpd_uri_match_wildcard;
+    httpd_config_t conf = HTTPD_DEFAULT_CONFIG();
+    conf.uri_match_fn = httpd_uri_match_wildcard;
 
-    extern const unsigned char cacert_pem_start[] asm("_binary_cacert_pem_start");
-    extern const unsigned char cacert_pem_end[]   asm("_binary_cacert_pem_end");
-    conf.cacert_pem = cacert_pem_start;
-    conf.cacert_len = cacert_pem_end - cacert_pem_start;
 
-    extern const unsigned char prvtkey_pem_start[] asm("_binary_prvtkey_pem_start");
-    extern const unsigned char prvtkey_pem_end[]   asm("_binary_prvtkey_pem_end");
-    conf.prvtkey_pem = prvtkey_pem_start;
-    conf.prvtkey_len = prvtkey_pem_end - prvtkey_pem_start;
-
-    esp_err_t ret = httpd_ssl_start(&server, &conf);
+    esp_err_t ret = httpd_start(&server, &conf);
     if (ESP_OK != ret) {
         free(rest_context);
         ESP_LOGI(REST_TAG, "Error starting server!");
