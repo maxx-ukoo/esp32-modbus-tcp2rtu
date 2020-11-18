@@ -67,14 +67,6 @@ ledc_timer_config_t ledc_timer1 = {
     .clk_cfg = LEDC_AUTO_CLK,             // Auto select the source clock
 };
 
-ledc_timer_config_t ledc_timer2 = {
-    .duty_resolution = LEDC_TIMER_10_BIT, // resolution of PWM duty
-    .freq_hz = 64000,                      // frequency of PWM signal
-    .speed_mode = LEDC_HIGH_SPEED_MODE,   // timer mode
-    .timer_num = LEDC_TIMER_2,            // timer index
-    .clk_cfg = LEDC_AUTO_CLK,             // Auto select the source clock
-};
-
 //ledc_timer_config(&ledc_timer);
 
 static void IRAM_ATTR gpio_isr_handler(void* arg)
@@ -210,7 +202,7 @@ static esp_err_t gpioInit() {
                     gpioConfig[i][PWM_CHANNEL] = 1;
                     pwm_count++;
                 } else {
-                    ledc_timer_config(&ledc_timer2);
+                    ledc_timer_config(&ledc_timer1);
                     ledc_channel2.gpio_num = gpioConfig[i][ID];
                     ledc_channel_config(&ledc_channel2);
                     gpioConfig[i][PWM_CHANNEL] = 2;

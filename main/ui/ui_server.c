@@ -118,7 +118,6 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-
 httpd_handle_t ui_http_webserver_start(const char *base_path)
 {
     REST_CHECK(base_path, "wrong base path", err);
@@ -133,7 +132,6 @@ httpd_handle_t ui_http_webserver_start(const char *base_path)
 
     httpd_config_t conf = HTTPD_DEFAULT_CONFIG();
     conf.uri_match_fn = httpd_uri_match_wildcard;
-
 
     esp_err_t ret = httpd_start(&server, &conf);
     if (ESP_OK != ret) {

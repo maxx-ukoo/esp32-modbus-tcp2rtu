@@ -6,9 +6,7 @@ idf_component_register(SRCS "iot_module_main.c"
                             "modbus/modbus.c"
                             "gpio/gpio.c"
                             "mqtt/mqtt.c"
-                        INCLUDE_DIRS "."
-                        EMBED_TXTFILES  "certs/cacert.pem"
-                                        "certs/prvtkey.pem")
+                        INCLUDE_DIRS ".")
 
 if(CONFIG_EXAMPLE_WEB_DEPLOY_SF)
     set(WEB_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../front")
