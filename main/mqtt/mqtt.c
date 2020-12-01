@@ -169,8 +169,17 @@ void health_status_task(void *pvParameter)
         vTaskDelay(xDelay30s);
         ESP_LOGD(TAG, "MQTT status updating");
         char topic[50];
+
+        cJSON *root = cJSON_CreateObject();
+        cJSON_AddNumberToObject(root, "status", esp_get_free_heap_size());
+        cJSON *res = getGpioState();
+        cJSON_AddItemToObject(root, "gpio", res);
+
+        const char *status_body = cJSON_Print(root);
         snprintf(topic, sizeof topic, "/%s/module/state", mqtt_module_config.host);
-        int msg_id = esp_mqtt_client_publish(client, topic, "OK", 0, 0, 0);
+        int msg_id = esp_mqtt_client_publish(client, topic, status_body, 0, 0, 0);
+        cJSON_Delete(root);
+        free((void *)status_body);
         ESP_LOGD(TAG, "MQTT status updated");
     }
     vTaskDelete(NULL);

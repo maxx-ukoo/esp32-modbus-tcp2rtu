@@ -46,12 +46,12 @@ static ledc_channel_config_t ledc_channel1 =
             .gpio_num   = 0,
             .speed_mode = LEDC_HIGH_SPEED_MODE,
             .hpoint     = 0,
-            .timer_sel  = LEDC_TIMER_0
+            .timer_sel  = LEDC_TIMER_1
         };
 
 static ledc_channel_config_t ledc_channel2 = 
         {
-            .channel    = LEDC_CHANNEL_2,
+            .channel    = LEDC_CHANNEL_1,
             .duty       = 1023,
             .gpio_num   = 0,
             .speed_mode = LEDC_HIGH_SPEED_MODE,
@@ -110,10 +110,16 @@ esp_err_t setPinState(int pin, int state) {
     } else if (gpioConfig[idx][MODE] == MODE_PWM) {
         //ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, state);
         //ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);
+
+        
         if (gpioConfig[idx][PWM_CHANNEL] == 1) {
+            ESP_LOGI(GPIO_TAG, "Update PWM for channel 1");
+            //ledc_set_fade_step_and_start()
+            //ledc_set_fade_step_and_start(ledc_channel1.speed_mode, ledc_channel1.channel, state, 1, 1, LEDC_FADE_NO_WAIT);
             ledc_set_fade_with_time(ledc_channel1.speed_mode, ledc_channel1.channel, state, 1000);
             ledc_fade_start(ledc_channel1.speed_mode,ledc_channel1.channel, LEDC_FADE_NO_WAIT);
         } else {
+            ESP_LOGI(GPIO_TAG, "Update PWM for channel 2");
             ledc_set_fade_with_time(ledc_channel2.speed_mode, ledc_channel2.channel, state, 1000);
             ledc_fade_start(ledc_channel2.speed_mode,ledc_channel2.channel, LEDC_FADE_NO_WAIT);
         }
@@ -171,6 +177,7 @@ static esp_err_t gpioInit() {
 
     if (fade_service_status != ESP_OK) {
         fade_service_status = ledc_fade_func_install(1);
+        ESP_LOGD(GPIO_TAG, "Fade service installed");
     }
 
     int pwm_count = 0;
@@ -227,7 +234,10 @@ static bool configurePin(int id, int mode, int pull_up, int pull_down) {
     ESP_LOGD(GPIO_TAG, "configurePin: mode=%d", mode);
     ESP_LOGD(GPIO_TAG, "configurePin: max_mode=%d", gpioConfig[idx][SUPPORTED_MODES]);
     if ((mode & gpioConfig[idx][SUPPORTED_MODES]) == 0) {
-        return false;
+        gpioConfig[idx][MODE] = -1;
+        gpioConfig[idx][PULL_D] = 0;
+        gpioConfig[idx][PULL_U] = 0;
+        return true;
     }
     gpioConfig[idx][MODE] = mode;
     gpioConfig[idx][PULL_D] = pull_down;
@@ -314,29 +324,64 @@ end:
     return NULL;
 }
 
-
+int readPinState(int pin) {
+    int idx = getPinIndex(pin);
+    if (idx == -1) {
+        return -1;
+    }
+    if (gpioConfig[idx][MODE] == MODE_OUTPUT) {
+        return gpio_get_level(pin);
+    } else if (gpioConfig[idx][MODE] == MODE_PWM) {
+        if (gpioConfig[idx][PWM_CHANNEL] == 1) {
+            return ledc_get_duty(ledc_channel1.speed_mode, ledc_channel1.channel);
+        } else {
+            return ledc_get_duty(ledc_channel2.speed_mode, ledc_channel2.channel);
+        }
+    } else if (gpioConfig[idx][MODE] == MODE_INPUT) {
+        return gpio_get_level(pin);
+    }
+    return -2;
+}
 
 cJSON * getPinState(int pin) {
     int idx = getPinIndex(pin);
     cJSON *root = cJSON_CreateObject();
     if (idx == -1) {
         cJSON_AddNumberToObject(root, "error_no_pin", 1);
+        return root;
     }
-    cJSON_AddNumberToObject(root, "pin", pin);
-    int state = -1;
-    if (gpioConfig[idx][MODE] != 0) {
-        cJSON_AddNumberToObject(root, "error_wrong_mode", 1);
-    }
-
-    if (gpioConfig[idx][MODE] == MODE_OUTPUT) {
-        state = gpio_get_level(pin);
-    } else if (gpioConfig[idx][MODE] == MODE_PWM) {
-        state = ledc_get_duty(ledc_channel1.speed_mode, ledc_channel1.channel);
+    cJSON *json_pin = cJSON_CreateObject();
+    char pinName[10];
+    snprintf(pinName, sizeof pinName, "pin%d", pin);
+    cJSON_AddItemToObject(root, pinName, json_pin);    
+    int state = readPinState(pin);
+    if (state == -1) {
+        cJSON_AddNumberToObject(json_pin, "error_no_pin", 1);
+    } else if (state == -2) {
+        cJSON_AddNumberToObject(json_pin, "error_wrong_mode", 1);
     } else {
-        cJSON_AddNumberToObject(root, "error_wrong_mode", 1);
+        cJSON_AddNumberToObject(json_pin, "state", state);
+        cJSON_AddNumberToObject(json_pin, "mode", gpioConfig[idx][MODE]);
     }
-
-    cJSON_AddNumberToObject(root, "state", state);
     return root;
 }
 
+cJSON * getGpioState() {
+    cJSON *gpio = cJSON_CreateArray();
+    if (gpio == NULL)
+    {
+        goto end;
+    }
+    for (int i = 0; i < GPIO_NUMBER; ++i) {
+        int pin_state = readPinState(gpioConfig[i][ID]);
+        if (pin_state > -1) {
+            cJSON *json_pin_state = getPinState(gpioConfig[i][ID]);
+            cJSON_AddItemToArray(gpio, json_pin_state);
+        }
+    }
+    return gpio;
+end:
+    ESP_LOGE(GPIO_TAG, "Error on creating gpio config");
+    cJSON_Delete(gpio);
+    return NULL;
+}

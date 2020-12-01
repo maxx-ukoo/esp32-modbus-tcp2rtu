@@ -202,6 +202,7 @@ esp_err_t gpio_control_state_get_handler(httpd_req_t *req) {
 
     /* Read URL query string length and allocate memory for length + 1,
      * extra byte for null termination */
+    int pin = -1;
     buf_len = httpd_req_get_url_query_len(req) + 1;
     if (buf_len > 1) {
         buf = malloc(buf_len);
@@ -213,10 +214,15 @@ esp_err_t gpio_control_state_get_handler(httpd_req_t *req) {
             }
         }
         free(buf);
+        pin = atoi(param);
     }
-    int pin = atoi(param);
     ESP_LOGD(TAG, "Get gpio state: pin = %d", pin);
-    cJSON *res =  getPinState(pin);
+    cJSON *res;
+    if (pin != -1) {
+        res =  getPinState(pin);
+    } else {
+        res =  getGpioState();
+    }
     const char *resp_body = cJSON_Print(res);
     httpd_resp_sendstr(req, resp_body);
     free((void *)resp_body);
