@@ -10,7 +10,7 @@ static const char *TAG = "Time utils";
 static char start_time[64];
 
 char* get_current_local_time() {
-    char *time_buf = malloc(64 * sizeof(char));
+    char *time_buf = (char*)malloc(64 * sizeof(char));
     time_t now = 0;
     struct tm timeinfo = { 0 };
     

@@ -1,12 +1,14 @@
-idf_component_register(SRCS "iot_module_main.c"
-                            "ui/ui_server.c"
-                            "ui/ui_server_handler.c"
-                            "ui/ota_handler.c"
-                            "config/config.c"
-                            "modbus/modbus.c"
-                            "gpio/gpio.c"
-                            "mqtt/mqtt.c"
-                            "time_utils.c"
+idf_component_register(SRCS "iot_module_main.cpp"
+                            "ui/ui_server.cpp"
+                            "ui/ui_server_handler.cpp"
+                            "ui/ui_stepper_handler.cpp"
+                            "ui/ota_handler.cpp"
+                            "config/config.cpp"
+                            "modbus/modbus.cpp"
+                            "gpio/gpio.cpp"
+                            "mqtt/mqtt.cpp"
+                            "time_utils.cpp"
+                            "curtains/curtains.cpp"
                         INCLUDE_DIRS ".")
 
 if(CONFIG_EXAMPLE_WEB_DEPLOY_SF)

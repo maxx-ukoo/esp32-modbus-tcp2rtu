@@ -18,7 +18,9 @@ These functions tested:
 
 # Build
 
-## This library request patch to esp-idf 
+## Firmware
+
+### This library request patch to esp-idf 
 ```diff
  components/freemodbus/common/include/esp_modbus_common.h | 14 +++++++-------
  1 file changed, 7 insertions(+), 7 deletions(-)
@@ -66,7 +68,7 @@ index cd171c755..ea2da148c 100644
  /**
 ```
 
-## Build
+### Build
 1. Prepare environment - https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html
 2. Firmware build
 ```
@@ -74,10 +76,10 @@ idf.py build
 idf.py -p COMX flash
 ```
 
-3. UI build
+## UI build
 ```
 cd front
-npm start build
+npm run-script build
 ```
 
 # Debug usage
@@ -92,7 +94,35 @@ TOPIC: /HOST/gpio/command
 /api/gpio/state?pin=23
 
 ## Upload file via CURL
+```
 curl -k -vvv -F upload=@/mnt/d/Projects/wesp32/esp32-modbus-tcp2rtu/front/dist/main.test.gz https://192.168.0.42/ota/upload/file
+```
+
+## Upload firmware via CURL
+```
+curl -k -vvv -F upload=@/mnt/d/Projects/wesp32/esp32-modbus-tcp2rtu/build/iot-module.bin http://10.135.0.41/ota/upload/firmware
+curl -X POST http://10.135.0.41/ota/upload/reboot
+```
+
+# Curtains
+
+## Calibrate
+
+```
+curl -X POST "http://10.135.0.41/api/stepper/calibrate?curtain=0"
+```
+
+## Move 
+### manual steps
+```
+curl -X POST "http://10.135.0.41/api/stepper/step?curtain=0&direction=1&steps=100"
+```
+### set to position
+
+```
+curl -X POST "http://10.135.0.41/api/stepper/move?position=70"
+```
+
 
 ## Links
 [Setup webapp](https://www.valentinog.com/blog/babel/)

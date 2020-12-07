@@ -126,11 +126,12 @@ class Gpio  extends Component {
                 <th scope="col">{item.id}</th>
                 <th scope="col">
                   <div className="form-group">
-                    <select id={"sw" + item.id} value={item.mode} className="form-control" onChange={this.handleModeChange}>
+                    <select id={"sw" + item.id} value={item.mode} className="form-control" onChange={this.handleModeChange} disabled={item.mode > 4}>
                       <option value="0">Disabled</option>
                       <option value="1">Input</option>
                       <option value="2">Output</option>
                       <option value="4">PWM</option>
+                      <option value="8">MODBUS</option>
                     </select>
                   </div>
                 </th>

@@ -6,44 +6,40 @@
    software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
    CONDITIONS OF ANY KIND, either express or implied.
 */
-#include "config/config.h"
+
 
 #include <stdio.h>
 #include <string.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-//#include "freertos/queue.h"
-//#include "freertos/semphr.h"
-#include "esp_netif.h"
-//#include "esp_eth.h"
-#include "esp_event.h"
-#include "esp_log.h"
-#include "esp_spiffs.h"
-#include "sdkconfig.h"
-#include "tcpip_adapter_types.h"
-#include "esp_sntp.h"
 
-//#include <time.h>
-//#include <sys/time.h>
-//#include <sys/unistd.h>
-//#include "unity.h"
-#include "cJSON.h"
-
-//#include "esp_system.h"
-//#include "esp_vfs.h"
-
-
-#include "esp_partition.h"
-
-#include "modbus/modbus.h"
-#include "ui/ui_server.h"
+extern "C" {
+    #include "freertos/FreeRTOS.h"
+    #include "freertos/task.h"
+    #include "esp_netif.h"
+    #include "tcpip_adapter_types.h"
+    #include "cJSON.h"
+    #include "esp_sntp.h"
+    #include "esp_event.h"
+    #include "esp_log.h"
+    #include "esp_spiffs.h"
+    #include "sdkconfig.h"
+    #include "esp_partition.h"
+    #include "modbus\modbus_const.h"
+}
+#include "config/config.h"
 #include "gpio/gpio.h"
 #include "mqtt/mqtt.h"
+#include "ui/ui_server.h"
 #include "ui/ota_handler.h"
 #include "time_utils.h"
+#include "modbus/modbus.h"
+#include "curtains/curtains.h"
 
 //#include <esp_https_server.h>
 
+// Make app_main look like a C function to the linker.
+extern "C" {
+   void app_main(void);
+}
 
 static const char *TAG = "IOT DIN Module";
 static esp_netif_t *eth_netif = NULL;
@@ -86,14 +82,15 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base,
     case ETHERNET_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "Ethernet Link Down");
         break;
-    case ETHERNET_EVENT_START:
+    case ETHERNET_EVENT_START: {
         ESP_LOGI(TAG, "Ethernet Started");
-        cJSON *config = readConfig();
+        cJSON *config = IOTConfig::readConfig();
         cJSON *mqtt = cJSON_GetObjectItem(config, "mqtt");
         ESP_LOGI(TAG, "Set hostname to %s", cJSON_GetObjectItem(mqtt, "host")->valuestring);
         esp_netif_set_hostname(eth_netif, cJSON_GetObjectItem(mqtt, "host")->valuestring);
         cJSON_Delete(config);
         break;
+    }
     case ETHERNET_EVENT_STOP:
         ESP_LOGI(TAG, "Ethernet Stopped");
         break;
@@ -101,7 +98,6 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base,
         break;
     }
 }
-
 
 /** Event handler for IP_EVENT_ETH_GOT_IP */
 static void got_ip_event_handler(void *arg, esp_event_base_t event_base,
@@ -152,18 +148,15 @@ esp_err_t init_fs(void)
 }
 
 void components_start(void) {
-
-    cJSON *config = readConfig();
+    cJSON *config = IOTConfig::readConfig();
     cJSON *modbus = cJSON_GetObjectItem(config, "modbus");
-    int enable = cJSON_GetObjectItem(modbus, "enable")->valueint;
-    if (enable == 1) {
-        ESP_ERROR_CHECK(modbus_start(cJSON_GetObjectItem(modbus, "speed")->valueint));
-    }
-
+    ESP_ERROR_CHECK(IOTModbus::modbus_start(cJSON_GetObjectItem(modbus, "speed")->valueint));
+    cJSON *curtains = cJSON_GetObjectItem(config, "curtains");
+    IOTCurtains::curtains_json_init(curtains);
     cJSON *gpio = cJSON_GetObjectItem(config, "gpio");
-    gpioInitFromJson(gpio);
+    IOTGpio::gpio_json_init(gpio, false);
     cJSON *mqtt = cJSON_GetObjectItem(config, "mqtt");
-    mqtt_init_from_json(mqtt);
+    IOTMqtt::mqtt_json_init(mqtt);
     cJSON_Delete(config);
 }
 

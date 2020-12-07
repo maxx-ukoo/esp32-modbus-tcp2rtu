@@ -8,18 +8,20 @@
 */
 #include "ui_server.h"
 #include "ui_server_handler.h"
+#include "ui_stepper_handler.h"
 #include "ota_handler.h"
-#include <string.h>
-#include <fcntl.h>
-#include "esp_http_server.h"
-#include "esp_system.h"
+extern "C" {
 
+    #include <string.h>
+    #include <fcntl.h>
+    #include "esp_http_server.h"
+    #include "esp_system.h"
 
-
-#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
-#include "esp_log.h"
-#include "esp_vfs.h"
-#include "cJSON.h"
+    #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+    #include "esp_log.h"
+    #include "esp_vfs.h"
+    #include "cJSON.h"
+}
 
 static const char *REST_TAG = "IOT DIN Server";
 
@@ -120,9 +122,16 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
 
 httpd_handle_t ui_http_webserver_start(const char *base_path)
 {
-    REST_CHECK(base_path, "wrong base path", err);
-    rest_server_context_t *rest_context = calloc(1, sizeof(rest_server_context_t));
-    REST_CHECK(rest_context, "No memory for rest context", err);
+    if (!(base_path)) {
+        ESP_LOGI(REST_TAG, "wrong base path");
+        return NULL;
+    }
+    rest_server_context_t *rest_context = (rest_server_context_t*) calloc(1, sizeof(rest_server_context_t));
+    if (!(base_path)) {
+        ESP_LOGI(REST_TAG, "No memory for rest context");
+        return NULL;
+    }
+    
     strlcpy(rest_context->base_path, base_path, sizeof(rest_context->base_path));
     
     httpd_handle_t server = NULL;
@@ -131,6 +140,7 @@ httpd_handle_t ui_http_webserver_start(const char *base_path)
     ESP_LOGI(REST_TAG, "Starting server");
 
     httpd_config_t conf = HTTPD_DEFAULT_CONFIG();
+    conf.max_uri_handlers = 10,   
     conf.uri_match_fn = httpd_uri_match_wildcard;
 
     esp_err_t ret = httpd_start(&server, &conf);
@@ -140,10 +150,29 @@ httpd_handle_t ui_http_webserver_start(const char *base_path)
         return NULL;
     }
 
-    // Set URI handlers
-    //ESP_LOGI(REST_TAG, "Registering URI handlers");
-    //httpd_register_uri_handler(server, &root);
-        /* URI handler for getting web server files */
+    httpd_uri_t stepper_calibrate_post_uri = {
+        .uri = "/api/stepper/calibrate",
+        .method = HTTP_POST,
+        .handler = stepper_calibrate_handler,
+        .user_ctx = rest_context
+    };
+    httpd_register_uri_handler(server, &stepper_calibrate_post_uri);
+
+    httpd_uri_t stepper_move_post_uri = {
+        .uri = "/api/stepper/move",
+        .method = HTTP_POST,
+        .handler = stepper_move_handler,
+        .user_ctx = rest_context
+    };
+    httpd_register_uri_handler(server, &stepper_move_post_uri);
+
+    httpd_uri_t stepper_steps_post_uri = {
+        .uri = "/api/stepper/step",
+        .method = HTTP_POST,
+        .handler = stepper_steps_handler,
+        .user_ctx = rest_context
+    };
+    httpd_register_uri_handler(server, &stepper_steps_post_uri);
 
     /* URI handler for settings */
     httpd_uri_t component_control_post_uri = {
@@ -153,33 +182,6 @@ httpd_handle_t ui_http_webserver_start(const char *base_path)
         .user_ctx = rest_context
     };
     httpd_register_uri_handler(server, &component_control_post_uri);
-
-    /* URI handler for ModBus settings */
-/*    httpd_uri_t modbus_control_post_uri = {
-        .uri = "/api/modbus",
-        .method = HTTP_POST,
-        .handler = modbus_control_post_handler,
-        .user_ctx = rest_context
-    };
-    httpd_register_uri_handler(server, &modbus_control_post_uri); */
-
-    /* URI handler for MQTT settings */
-/*    httpd_uri_t mqtt_control_post_uri = {
-        .uri = "/api/mqtt",
-        .method = HTTP_POST,
-        .handler = mqtt_control_post_handler,
-        .user_ctx = rest_context
-    };
-    httpd_register_uri_handler(server, &mqtt_control_post_uri);*/
-
-    /* URI handler for GPIO settings */
-/*    httpd_uri_t gpio_control_post_uri = {
-        .uri = "/api/gpio",
-        .method = HTTP_POST,
-        .handler = gpio_control_post_handler,
-        .user_ctx = rest_context
-    };
-    httpd_register_uri_handler(server, &gpio_control_post_uri);*/
 
     /* URI handler for control pin state */
     httpd_uri_t gpio_control_state_get_uri = {
@@ -222,6 +224,4 @@ httpd_handle_t ui_http_webserver_start(const char *base_path)
     };
     httpd_register_uri_handler(server, &common_get_uri);
     return server;
-err:
-    return NULL;
 }

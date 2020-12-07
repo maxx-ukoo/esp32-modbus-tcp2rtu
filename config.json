@@ -1,7 +1,7 @@
 {
 	"modbus":	{
-		"speed":	9600,
-		"enable":	false
+		"speed":	115200,
+		"enable":	true
 	},
 	"gpio":	[{
 			"id":	2,
@@ -70,18 +70,24 @@
 			"pull_down":	0
 		}, {
 			"id":	36,
-			"mode":	-1,
+			"mode":	0,
 			"pull_up":	0,
 			"pull_down":	0
 		}, {
 			"id":	39,
-			"mode":	-1,
+			"mode":	0,
 			"pull_up":	0,
 			"pull_down":	0
 		}],
 	"mqtt":	{
-		"enable":	0,
-		"broker":	"mqtt://host",
-		"host":	"iot-module"
-	}
+		"enable":	true,
+		"broker":	"mqtt://mqtt.maxx",
+		"host":	"iot-module-ip-41"
+	},
+	"curtains" : [{
+		"io_step" : 23,
+		"io_dir" : 32,
+		"io_hi_pos" : 36,
+		"lenght" : 20000
+	}]
 }

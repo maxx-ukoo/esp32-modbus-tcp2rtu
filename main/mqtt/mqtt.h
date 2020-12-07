@@ -1,21 +1,46 @@
-/** @file mqtt.h
- * 
- * @brief tcp2rtu gateway
- *
- * @par       
- * COPYRIGHT NOTICE: (c) 2020 Maksym Krasovskyi.  All rights reserved.
- */ 
+
 #ifndef MQTT_H
 #define MQTT_H
 
-#include "cJSON.h"
-#include "esp_err.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
+    #include "cJSON.h"
+    #include "esp_err.h"
+    #include "mqtt_client.h"
+#ifdef __cplusplus
+}
+#endif
 
-esp_err_t mqtt_init_from_json(cJSON *gpio);
-cJSON * get_mqtt_config();
+typedef struct mqtt_config
+{
+    bool enable;
+    char *broker;
+    char *host;
+} mqtt_config_t;
 
-static esp_err_t start_mqtt_client();
+class IOTMqtt {
+    private:
+        IOTMqtt(const IOTMqtt&);
+        IOTMqtt& operator =(const IOTMqtt&);
+        static esp_mqtt_client_handle_t client;
+        static mqtt_config_t mqtt_module_config;
+        static char *mqtt2gpio_topic;
+        static xQueueHandle gpio2mqtt_queue;
+        static xQueueHandle mqtt2gpio_queue;
+        static TaskHandle_t health_status_task_handle;
+        static mqtt_config_t init_with_default_config();
+        static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event);
+        static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, esp_mqtt_event_handle_t event_data);
+        static void gpio2mqtt_task();
+        static esp_err_t subscribe_to_gpio();
+        static void health_status_task(void *pvParameter);
+        static esp_err_t start_mqtt_client();
+    public:
+        IOTMqtt(cJSON *curtains);
+        static esp_err_t mqtt_json_init(cJSON *gpio);
+        static cJSON *get_mqtt_config();
+        ~IOTMqtt(void);
+};
 
 #endif /* MQTT_H */
-
-

@@ -1,87 +1,90 @@
 #include "config.h"
-#include <stdio.h>
 
-#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
-#include "esp_log.h"
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+    #include <stdio.h>
+
+    #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+    #include "esp_log.h"
+    #include "modbus\modbus_const.h"
+#ifdef __cplusplus
+}
+#endif
+
 #include "gpio\gpio.h"
 #include "mqtt\mqtt.h"
 
-
-static const char *CONFIG_TAG = "IOT DIN Config";
+static const char *TAG = "IOT DIN Config";
 static const char *CONFIG_FILE = "/www/config.json";
 
-void writeConfig(cJSON *config) {
+void IOTConfig::writeConfig(cJSON *config) {
     FILE* f = fopen(CONFIG_FILE, "w+");
     if (f == NULL) {
-        ESP_LOGE(CONFIG_TAG, "Failed to open file for writing");
+        ESP_LOGE(TAG, "Failed to open file for writing");
         return;
     }
     fprintf(f, cJSON_Print(config));
     fclose(f);
 }
 
-cJSON * createModbusConfig(bool e, int s) {
+cJSON *IOTConfig::createModbusConfig(bool e, int s) {
     cJSON *speed = NULL;
     cJSON *enable = NULL;
     cJSON *modbus = cJSON_CreateObject();
     if (modbus == NULL)
     {
-        goto end;
+        return NULL;
     }
     speed = cJSON_CreateNumber(s);
     if (speed == NULL)
     {
-        goto end;
+        return NULL;
     }
     cJSON_AddItemToObject(modbus, "speed", speed);
     enable = cJSON_CreateBool(e);
     if (enable == NULL)
     {
-        goto end;
+        return NULL;
     }
     cJSON_AddItemToObject(modbus, "enable", enable);
     return modbus;
-end:
-    cJSON_Delete(modbus);
-    return NULL;
 }
 
-cJSON * createDefaultConfig() {
+cJSON *IOTConfig::createDefaultConfig() {
     cJSON *config = cJSON_CreateObject();
     if (config == NULL)
     {
-        goto end;
+        return NULL;
     }
     cJSON *modbus = createModbusConfig(false, 9600);
     cJSON_AddItemToObject(config, "modbus", modbus);
-    cJSON *gpio = getGpioConfig();
+    cJSON *gpio = IOTGpio::get_gpio_config();
     cJSON_AddItemToObject(config, "gpio", gpio);
-    cJSON *mqtt = get_mqtt_config();
+    cJSON *mqtt = IOTMqtt::get_mqtt_config();
     cJSON_AddItemToObject(config, "mqtt", mqtt);
     writeConfig(config);
     return config;
-    end:
-        cJSON_Delete(config);
-        return NULL;
 }
 
-cJSON * readConfig() {
+cJSON *IOTConfig::readConfig() {
     FILE* f = fopen(CONFIG_FILE, "r");
     if (f == NULL) {
-        ESP_LOGE(CONFIG_TAG, "Failed to open file for reading");
+        ESP_LOGE(TAG, "Failed to open file for reading");
         return createDefaultConfig();
     }
 
-    char * buffer = 0;
+    char* buffer = 0;
     long length;
     fseek(f, 0, SEEK_END);
     length = ftell(f);
     fseek(f, 0, SEEK_SET);
-    buffer = malloc(length+1);
+    buffer = (char*) malloc(length+1);
     if (buffer)
     {
-        fread (buffer, 1, length, f);
+        fread(buffer, 1, length, f);
     }
     buffer[length] = 0;
     fclose(f);
@@ -102,35 +105,35 @@ end:
     return NULL;    
 }
 
-void writeModbusConfig(bool enable, int speed) {
-    ESP_LOGD(CONFIG_TAG, "Modbus control update: enable = %d, speed = %d", enable, speed);
-
-    cJSON *modbus = createModbusConfig(enable, speed);
+void IOTConfig::writeModbusConfig(bool enable, int speed) {
+    ESP_LOGD(TAG, "Modbus control update: enable = %d, speed = %d", enable, speed);
     cJSON *config = readConfig();
-
+    cJSON *modbus = createModbusConfig(enable, speed);
     cJSON_ReplaceItemInObject(config,"modbus",modbus);
     writeConfig(config);
     cJSON_Delete(config);
+    writeGpioConfig();
 }
 
-void writeGpioConfig(cJSON *gpio) {
+void IOTConfig::writeGpioConfig() {
     cJSON *config = readConfig();
-    ESP_LOGD(CONFIG_TAG, "Read");
+    ESP_LOGD(TAG, "Read");
+    cJSON *gpio = IOTGpio::get_gpio_config();
     cJSON_ReplaceItemInObject(config,"gpio",gpio);
-    ESP_LOGD(CONFIG_TAG, "Replaced");
+    ESP_LOGD(TAG, "Replaced");
     writeConfig(config);
-    ESP_LOGD(CONFIG_TAG, "write");
+    ESP_LOGD(TAG, "write");
     cJSON_Delete(config);
-    ESP_LOGD(CONFIG_TAG, "deleted");
+    ESP_LOGD(TAG, "deleted");
 }
 
-void write_mqtt_config(cJSON *mqtt) {
+void IOTConfig::write_mqtt_config(cJSON *mqtt) {
     cJSON *config = readConfig();
-    ESP_LOGD(CONFIG_TAG, "Read");
+    ESP_LOGD(TAG, "Read");
     cJSON_ReplaceItemInObject(config,"mqtt",mqtt);
-    ESP_LOGD(CONFIG_TAG, "Replaced");
+    ESP_LOGD(TAG, "Replaced");
     writeConfig(config);
-    ESP_LOGD(CONFIG_TAG, "write");
+    ESP_LOGD(TAG, "write");
     cJSON_Delete(config);
-    ESP_LOGD(CONFIG_TAG, "deleted");
+    ESP_LOGD(TAG, "deleted");
 }

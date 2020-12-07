@@ -1,16 +1,22 @@
 #include "modbus_const.h"
 #include "modbus.h"
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+    #include <stdio.h>
+    #include <string.h>
+    #include "freertos/FreeRTOS.h"
+    #include "esp_netif.h"
+    #include "esp_log.h"
+    #include "esp_err.h"
+    #include "lwip/sockets.h"
+    #include "esp_modbus_master.h"
+#ifdef __cplusplus
+}
+#endif
 
-#include <stdio.h>
-#include <string.h>
-#include "freertos/FreeRTOS.h"
-#include "esp_netif.h"
-#include "esp_log.h"
-#include "esp_err.h"
-#include "esp_event.h"
-#include "lwip/sockets.h"
-
-#include "esp_modbus_master.h"
+#include "gpio/gpio.h"
 
 
 static const char *MODBUS_TAG = "modbus";
@@ -21,10 +27,10 @@ static const char *MODBUS_TAG = "modbus";
         return (ret_val); \
     }
 
-static xQueueHandle tcp2rtu_queue = NULL;
-static xQueueHandle rtu2tcp_queue = NULL;
+xQueueHandle IOTModbus::tcp2rtu_queue = NULL;
+xQueueHandle IOTModbus::rtu2tcp_queue = NULL;
 
-esp_err_t modbus_start(int port_speed) {
+esp_err_t IOTModbus::modbus_start(int port_speed) {
     esp_err_t err = modbus_init(port_speed);
     if (err != 0) {
         ESP_LOGE(MODBUS_TAG, "Error occurred during init modbus: err %d", err);
@@ -38,14 +44,14 @@ esp_err_t modbus_start(int port_speed) {
     return ESP_OK;
 }
 
-esp_err_t modbus_init(int port_speed)
+esp_err_t IOTModbus::modbus_init(int port_speed)
 {
-    mb_communication_info_t comm = {
-            .port = MB_PORTNUM,
-            .mode = MB_MODE_RTU,
-            .baudrate = port_speed,
-            .parity = MB_PARITY
-    };
+    mb_communication_info_t comm;
+    comm.port = MB_PORTNUM;
+    comm.mode = MB_MODE_RTU;
+    comm.baudrate = port_speed;
+    comm.parity = MB_PARITY;
+
     void* master_handler = NULL;
 
     esp_err_t err = mbc_master_init(MB_PORT_SERIAL_MASTER, &master_handler);
@@ -72,11 +78,14 @@ esp_err_t modbus_init(int port_speed)
     SENSE_MB_CHECK((err == ESP_OK), ESP_ERR_INVALID_STATE,
             "mb serial set mode failure, uart_set_mode() returned (0x%x).", (uint32_t)err);
     vTaskDelay(5);
+    IOTGpio::reservePin(CONFIG_MB_UART_RXD, MODE_MODBUS);
+    IOTGpio::reservePin(CONFIG_MB_UART_TXD, MODE_MODBUS);
+    IOTGpio::reservePin(CONFIG_MB_UART_RTS, MODE_MODBUS);
 
     return err;
 }
 
-void modbus_tcp_slave_task(void *pvParameters)
+void IOTModbus::modbus_tcp_slave_task(void *pvParameters)
 {
     char rx_buffer[128];
     char addr_str[128];
@@ -148,7 +157,7 @@ void modbus_tcp_slave_task(void *pvParameters)
 
                 flow_control_msg_t msg = {
                     .message = rx_buffer,
-                    .length = len
+                    .length = (uint16_t)len
                 };
                 if (xQueueSend(tcp2rtu_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) != pdTRUE) {
                     ESP_LOGE(MODBUS_TAG, "send flow control message failed or timeout");
@@ -181,7 +190,7 @@ void modbus_tcp_slave_task(void *pvParameters)
     vTaskDelete(NULL);
 }
 
-void eth2rtu_flow_control_task(void *args)
+void IOTModbus::eth2rtu_flow_control_task(void *args)
 {
     flow_control_msg_t msg;
     //uint32_t timeout = 0;
@@ -225,10 +234,10 @@ void eth2rtu_flow_control_task(void *args)
             
             // Execute modbus request
             mb_param_request_t modbus_request = {
-                slaveId,
-                function,
-                start,
-                len
+                (uint8_t)slaveId,
+                (uint8_t)function,
+                (uint16_t)start,
+                (uint16_t)len
             };
 
             uint8_t param_buffer[24] = { 0 };
@@ -293,7 +302,7 @@ void eth2rtu_flow_control_task(void *args)
     vTaskDelete(NULL);
 }
 
-esp_err_t initialize_flow_control(void)
+esp_err_t IOTModbus::initialize_flow_control(void)
 {
     tcp2rtu_queue = xQueueCreate(FLOW_CONTROL_QUEUE_LENGTH, sizeof(flow_control_msg_t));
     if (!tcp2rtu_queue) {
@@ -305,12 +314,12 @@ esp_err_t initialize_flow_control(void)
         ESP_LOGE(MODBUS_TAG, "create rtu2tcp_queue queue failed");
         return ESP_FAIL;
     }
-    BaseType_t ret = xTaskCreate(eth2rtu_flow_control_task, "flow_ctl", 2048, NULL, (tskIDLE_PRIORITY + 2), NULL);
+    BaseType_t ret = xTaskCreate(IOTModbus::eth2rtu_flow_control_task, "flow_ctl", 2048, NULL, (tskIDLE_PRIORITY + 2), NULL);
     if (ret != pdTRUE) {
         ESP_LOGE(MODBUS_TAG, "create tcp2rtu_queue task failed");
         return ESP_FAIL;
     }
-    ret = xTaskCreate(modbus_tcp_slave_task, "modbus_tcp_slave_task", 4096, NULL, 5, NULL);
+    ret = xTaskCreate(IOTModbus::modbus_tcp_slave_task, "modbus_tcp_slave_task", 4096, NULL, 5, NULL);
     if (ret != pdTRUE) {
         ESP_LOGE(MODBUS_TAG, "create modbus_tcp_slave_task task failed");
         return ESP_FAIL;

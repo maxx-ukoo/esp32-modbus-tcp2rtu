@@ -1,21 +1,27 @@
-/** @file config.h
- * 
- * @brief tcp2rtu gateway
- *
- * @par       
- * COPYRIGHT NOTICE: (c) 2020 Maksym Krasovskyi.  All rights reserved.
- */ 
-
 #ifndef CONFIG_H
 #define CONFIG_H
 
 #include <stdbool.h>
 #include "cJSON.h"
 
-cJSON * readConfig();
-void writeModbusConfig(bool enable, int speed);
-void writeGpioConfig(cJSON *gpio);
-void write_mqtt_config(cJSON *gpio);
+
+class IOTConfig {
+    private:
+        IOTConfig(const IOTConfig&);
+        IOTConfig& operator =(const IOTConfig&);
+    public:
+        IOTConfig();
+        static cJSON* readConfig();
+        static cJSON* createModbusConfig(bool e, int s);
+        static cJSON* createDefaultConfig();
+        static void writeModbusConfig(bool enable, int speed);
+        static void writeGpioConfig();
+        static void write_mqtt_config(cJSON *gpio);
+        static void writeConfig(cJSON *config);
+        
+
+    ~IOTConfig(void);
+};
 
 #endif /* CONFIG_H */
 
