@@ -82,6 +82,9 @@ TOPIC: /HOST/gpio/command
   "state": 5
 }
 
+## Get state
+/api/gpio/state?pin=23
+
 ## Upload file via CURL
 curl -k -vvv -F upload=@/mnt/d/Projects/wesp32/esp32-modbus-tcp2rtu/front/dist/main.test.gz https://192.168.0.42/ota/upload/file
 
