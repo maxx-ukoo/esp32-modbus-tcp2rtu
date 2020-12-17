@@ -61,7 +61,7 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
     char filepath[FILE_PATH_MAX];
     rest_server_context_t *rest_context = (rest_server_context_t *)req->user_ctx;
     strlcpy(filepath, rest_context->base_path, sizeof(filepath));
-    ESP_LOGE(REST_TAG, "URI : %s", req->uri);
+    ESP_LOGI(REST_TAG, "URI : %s", req->uri);
     if (req->uri[strlen(req->uri) - 1] == '/') {
         strlcat(filepath, "/index.html", sizeof(filepath));
     } else {
@@ -81,7 +81,7 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
     if (fd == -1) {
         ESP_LOGE(REST_TAG, "Failed to open file : %s", filepath);
         /* Respond with 500 Internal Server Error */
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to read existing file");
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Can't find file");
         return ESP_FAIL;
     }
 

@@ -6,6 +6,7 @@ idf_component_register(SRCS "iot_module_main.c"
                             "modbus/modbus.c"
                             "gpio/gpio.c"
                             "mqtt/mqtt.c"
+                            "time_utils.c"
                         INCLUDE_DIRS ".")
 
 if(CONFIG_EXAMPLE_WEB_DEPLOY_SF)

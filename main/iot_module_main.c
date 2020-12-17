@@ -21,6 +21,7 @@
 #include "esp_spiffs.h"
 #include "sdkconfig.h"
 #include "tcpip_adapter_types.h"
+#include "esp_sntp.h"
 
 //#include <time.h>
 //#include <sys/time.h>
@@ -39,12 +40,14 @@
 #include "gpio/gpio.h"
 #include "mqtt/mqtt.h"
 #include "ui/ota_handler.h"
+#include "time_utils.h"
 
 //#include <esp_https_server.h>
 
 
 static const char *TAG = "IOT DIN Module";
 static esp_netif_t *eth_netif = NULL;
+
 
 static void connect_handler(void* arg, esp_event_base_t event_base, 
                             int32_t event_id, void* event_data)
@@ -99,6 +102,7 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base,
     }
 }
 
+
 /** Event handler for IP_EVENT_ETH_GOT_IP */
 static void got_ip_event_handler(void *arg, esp_event_base_t event_base,
                                  int32_t event_id, void *event_data)
@@ -112,6 +116,7 @@ static void got_ip_event_handler(void *arg, esp_event_base_t event_base,
     ESP_LOGI(TAG, "ETHMASK:" IPSTR, IP2STR(&ip_info->netmask));
     ESP_LOGI(TAG, "ETHGW:" IPSTR, IP2STR(&ip_info->gw));
     ESP_LOGI(TAG, "~~~~~~~~~~~");
+    
 }
 
 esp_err_t init_fs(void)
@@ -146,9 +151,8 @@ esp_err_t init_fs(void)
     return ESP_OK;
 }
 
-
-
 void components_start(void) {
+
     cJSON *config = readConfig();
     cJSON *modbus = cJSON_GetObjectItem(config, "modbus");
     int enable = cJSON_GetObjectItem(modbus, "enable")->valueint;
@@ -161,6 +165,17 @@ void components_start(void) {
     cJSON *mqtt = cJSON_GetObjectItem(config, "mqtt");
     mqtt_init_from_json(mqtt);
     cJSON_Delete(config);
+}
+
+static void initialize_sntp(void)
+{
+    ESP_LOGI(TAG, "Initializing SNTP");
+    setenv("TZ", "EET-2EEST,M3.5.0/3,M10.5.0/4", 1);
+    tzset();
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "pool.ntp.org");
+    sntp_set_time_sync_notification_cb(time_sync_notification_cb);
+    sntp_init();
 }
 
 void app_main(void)
@@ -201,5 +216,7 @@ void app_main(void)
     components_start();
 
     xTaskCreate(&ota_system_reboot_task, "ota_system_reboot_task", 2048, NULL, 5, NULL);
+    
+    initialize_sntp();
 
 }

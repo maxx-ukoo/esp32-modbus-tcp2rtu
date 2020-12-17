@@ -68,10 +68,16 @@ index cd171c755..ea2da148c 100644
 
 ## Build
 1. Prepare environment - https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html
-2. Build
+2. Firmware build
 ```
 idf.py build
 idf.py -p COMX flash
+```
+
+3. UI build
+```
+cd front
+npm start build
 ```
 
 # Debug usage

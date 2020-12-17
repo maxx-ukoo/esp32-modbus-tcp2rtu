@@ -7,6 +7,7 @@
 #include "mqtt/mqtt.h"
 #include "esp_image_format.h"
 #include "esp_ota_ops.h"
+#include "time_utils.h"
 
 static const char *TAG = "REST Handler";
 
@@ -97,9 +98,15 @@ esp_err_t system_info_get_handler(httpd_req_t *req)
     cJSON_AddStringToObject(root, "idf_ver", app_desc->idf_ver);
     cJSON_AddStringToObject(root, "uptime", esp_log_system_timestamp());
     cJSON_AddNumberToObject(root, "memory", esp_get_free_heap_size());
+    
+    cJSON_AddStringToObject(root, "start_time", get_start_time());
+    char* str = get_current_local_time();
+    cJSON_AddStringToObject(root, "current_time", str);
+ 
     const char *sys_info = cJSON_Print(root);
     httpd_resp_sendstr(req, sys_info);
-    free((void *)sys_info);
+    free(sys_info);
+    free(str);
     cJSON_Delete(root);
     return ESP_OK;
 }
@@ -196,7 +203,7 @@ end:
 }
 
 esp_err_t gpio_control_state_get_handler(httpd_req_t *req) {
-    char*  buf;
+    char* buf;
     size_t buf_len;
     char param[32];
 
