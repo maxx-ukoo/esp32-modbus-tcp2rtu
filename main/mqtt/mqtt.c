@@ -3,6 +3,7 @@
 #include "esp_log.h"
 #include "mqtt_client.h"
 #include "gpio/gpio.h"
+#include "time_utils.h"
 
 static const char *TAG = "MQTT Tag";
 
@@ -167,7 +168,9 @@ void health_status_task(void *pvParameter)
     const TickType_t xDelay30s = pdMS_TO_TICKS(30000);
     while(1) {
         vTaskDelay(xDelay30s);
-        ESP_LOGD(TAG, "MQTT status updating");
+        char* str = get_current_local_time();
+        ESP_LOGD(TAG, "MQTT status updating at time %s", str);
+        free(str);
         char topic[50];
 
         cJSON *root = cJSON_CreateObject();

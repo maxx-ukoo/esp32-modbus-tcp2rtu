@@ -154,15 +154,21 @@ void modbus_tcp_slave_task(void *pvParameters)
                     ESP_LOGE(MODBUS_TAG, "send flow control message failed or timeout");
                     //free(buffer);
                 }
+                ESP_LOGI(MODBUS_TAG, "Flow message send");
                 vTaskDelay(50);
                 if (xQueueReceive(rtu2tcp_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) == pdTRUE) {
-                    //ESP_LOGW(TAG, "Received packet from rtu, len: %d", msg.length);
+                    ESP_LOGW(MODBUS_TAG, "Received packet from rtu, len: %d", msg.length);
+                        //ESP_LOGI(MODBUS_TAG, "==========  DUMP RTU IN START==========");
+                        //for (int i = 0; i<msg.length; i++) 
+                        //    ESP_LOGI(MODBUS_TAG, "=>: %d", *(msg.message + i));
+                        //ESP_LOGI(MODBUS_TAG, "==========  DUMP RTU IN END ==========");
                     int err = send(sock, msg.message, msg.length, 0);
                     if (err < 0) {
                         ESP_LOGE(MODBUS_TAG, "Error occurred during sending tcp responce: errno %d", errno);
                         //break;
                     }
                 }
+                ESP_LOGI(MODBUS_TAG, "Responce to host send");
             }
         }
 
@@ -184,6 +190,7 @@ void eth2rtu_flow_control_task(void *args)
     while (1) {
         if (xQueueReceive(tcp2rtu_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) == pdTRUE) {
             //Therefore, *(balance + 4) is a legitimate way of accessing the data at balance[4].
+            ESP_LOGI(MODBUS_TAG, "Request for modbus received");
 
             //// rutine Modbus TCP
             //int _msg_id = (*(msg.message + MB_TCP_TID) << 8) + *(msg.message + MB_TCP_TID+1);
@@ -229,6 +236,7 @@ void eth2rtu_flow_control_task(void *args)
             esp_err_t err = mbc_master_send_request(&modbus_request, &param_buffer[0]);
 
             if (err == ESP_OK) {
+                ESP_LOGI(MODBUS_TAG, "Got responce from modbus slave OK");
                 tx_buffer[8] = bytes; //Number of bytes after this one (or number of bytes of data).
                 switch(function)    {
                     case MB_FUNC_READ_INPUT_REGISTER:
@@ -237,11 +245,11 @@ void eth2rtu_flow_control_task(void *args)
                         //for (int i = 0; i<msg.length; i++) 
                         //    ESP_LOGI(MODBUS_TAG, "=>: %d", *(msg.message + i));
                         //ESP_LOGI(MODBUS_TAG, "==========  DUMP IN ==========");
-                        //ESP_LOGI(MODBUS_TAG, "==========  DUMP  OUT ==========");
-                        //for (int i = 0; i<regNumber; i++) {
-                        //    ESP_LOGI(MODBUS_TAG, "=>: %d", *(msg.message + i));
-                        //}
-                        //ESP_LOGI(MODBUS_TAG, "==========  DUMP OUT ==========");
+                        ESP_LOGI(MODBUS_TAG, "==========  DUMP FROM SLAVE START ==========");
+                        for (int i = 0; i<regNumber; i++) {
+                            ESP_LOGI(MODBUS_TAG, "=>: %d", *(param_buffer + i));
+                        }
+                        ESP_LOGI(MODBUS_TAG, "==========  DUMP FROM SLAVE END ==========");
                         for (int i = 0; i<regNumber; i++) {
                             tx_buffer[ 9 + i*2] = *(param_buffer + (i*2));
                             tx_buffer[ 9 + (i*2 + 1)] = *(param_buffer + i*2 + 1);
@@ -262,6 +270,7 @@ void eth2rtu_flow_control_task(void *args)
                         break;
                 }
             } else {
+                ESP_LOGE(MODBUS_TAG, "Got responce from modbus slave with error %s", esp_err_to_name(err));
                 tx_buffer[5] = 4;
                 tx_buffer[7] = function + 128;;
                 
@@ -278,6 +287,7 @@ void eth2rtu_flow_control_task(void *args)
             if (xQueueSend(rtu2tcp_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) != pdTRUE) {
                 ESP_LOGE(MODBUS_TAG, "send flow control message failed or timeout");
             }
+            ESP_LOGI(MODBUS_TAG, "Response from modbus processed witj OK");
         }
     }
     vTaskDelete(NULL);
