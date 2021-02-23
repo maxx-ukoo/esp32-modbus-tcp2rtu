@@ -23,6 +23,7 @@ extern "C"
 
     IOT4988Stepper::IOT4988Stepper(int step_io, int dir_io, int hi_pos_io)
     {
+        ESP_LOGI(TAG, "ets_get_detected_xtal_freq: %d\n", ets_get_detected_xtal_freq());
         ets_update_cpu_frequency_rom(ets_get_detected_xtal_freq() / 1000000);
         pstepper = (stepper_dev_t *)calloc(sizeof(stepper_dev_t), 1);
         pstepper->step_io = step_io;
@@ -84,9 +85,9 @@ extern "C"
             }
             ESP_LOGD(TAG, "Checks passed, current step: %d\n", i);
             gpio_set_level((gpio_num_t)pstepper->step_io, 1);
-            ets_delay_us(3000);
+            ets_delay_us(1000);
             gpio_set_level((gpio_num_t)pstepper->step_io, 0);
-            ets_delay_us(3000);
+            ets_delay_us(2000);
             if (i % 500 == 0) {
                 vTaskDelay(1);
             }
@@ -100,6 +101,7 @@ extern "C"
         pstepper->current_position = 0;
         pstepper->lenght = 500000;
         int calibrated_lenght = 0;
+        int start_position = 0;
         // move to up
         esp_err_t result;
         do
@@ -107,6 +109,7 @@ extern "C"
             result = step(UP, 1);
             if (result == ESP_OK) {
                 calibrated_lenght++;
+                start_position++;
             }
         } while (result == ESP_OK);
         ESP_LOGI(TAG, "Up position arrived, calibrated lenght = %d\n", calibrated_lenght);
@@ -116,7 +119,7 @@ extern "C"
             pstepper->lenght = lenght;
         }
         pstepper->current_position = 0;
-        return ESP_OK;
+        return step(DOWN, start_position);
     }
 
     esp_err_t IOT4988Stepper::move(int position) {
@@ -138,14 +141,7 @@ extern "C"
             direction = DOWN;
         }
         ESP_LOGI(TAG, "Move current: %d, expected: %d, requested: %d%%, steps: %d, direction: %d\n", pstepper->current_position, expected_position, position, steps, direction);
-        esp_err_t result;
-        for (int i=0; i<steps; i++) {
-            result = step(direction, 1);
-            if (result == ESP_FAIL) {
-                return ESP_FAIL;
-            }
-        }
-        return ESP_OK;
+        return step(direction, steps);
     }
     stepper_dev_t *IOT4988Stepper::get_stepper_config() {
         return pstepper;

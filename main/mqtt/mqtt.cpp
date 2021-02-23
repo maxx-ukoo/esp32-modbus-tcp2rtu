@@ -9,12 +9,14 @@ extern "C"
 }
 #endif
 #include "gpio/gpio.h"
+#include "curtains/curtains.h"
 #include "time_utils.h"
 
 static const char *TAG = "MQTT Tag";
 
 esp_mqtt_client_handle_t IOTMqtt::client = NULL;
 char *IOTMqtt::mqtt2gpio_topic = NULL;
+char *IOTMqtt::mqtt2curtains_topic = NULL;
 xQueueHandle IOTMqtt::gpio2mqtt_queue = NULL;
 xQueueHandle IOTMqtt::mqtt2gpio_queue = NULL;
 TaskHandle_t IOTMqtt::health_status_task_handle = NULL;
@@ -32,23 +34,32 @@ mqtt_config_t IOTMqtt::init_with_default_config()
 
 esp_err_t IOTMqtt::mqtt_json_init(cJSON *config)
 {
+
+
     ESP_LOGD(TAG, "Init MQTT from JSON");
     if (mqtt_module_config.broker == NULL)
     {
         mqtt_module_config = init_with_default_config();
     }
     mqtt_module_config.enable = cJSON_GetObjectItem(config, "enable")->valueint;
-
     strncpy(mqtt_module_config.broker, cJSON_GetObjectItem(config, "broker")->valuestring, 50);
     strncpy(mqtt_module_config.host, cJSON_GetObjectItem(config, "host")->valuestring, 50);
     ESP_LOGI(TAG, "mqtt_init, host config=%s", mqtt_module_config.host);
     ESP_LOGI(TAG, "mqtt_init, brocker config=%s", mqtt_module_config.broker);
+
+    if (mqtt2curtains_topic == NULL) {
+        mqtt2curtains_topic = (char *)malloc(sizeof(char) * (50));
+    }
+    snprintf(mqtt2curtains_topic, 50, "/%s/curtains/command", mqtt_module_config.host);
+    if (mqtt2gpio_topic == NULL) {
+        mqtt2gpio_topic = (char *)malloc(sizeof(char) * (50));
+    }
+    snprintf(mqtt2gpio_topic, 50, "/%s/gpio/command", mqtt_module_config.host);
     if (mqtt_module_config.enable == 1)
     {
         ESP_LOGD(TAG, "MQTT enabled in json, try to start mqtt client");
         return start_mqtt_client();
     }
-
     return ESP_OK;
 }
 
@@ -59,64 +70,85 @@ esp_err_t IOTMqtt::mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
     //char topic[50];
     switch (event->event_id)
     {
-    case MQTT_EVENT_CONNECTED:
-        ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-        //snprintf(topic, sizeof topic, "/%s/test/qos1", mqtt_module_config.host);
-        //msg_id = esp_mqtt_client_publish(client, topic, "data_3", 0, 1, 0);
-        //ESP_LOGI(TAG, "sent publish successful, topic=%s, msg_id=%d", topic, msg_id);
-        //snprintf(topic, sizeof topic, "/%s/test/qos0", mqtt_module_config.host);
-        msg_id = esp_mqtt_client_subscribe(client, mqtt2gpio_topic, 0);
-        ESP_LOGI(TAG, "subscribe successful, topic=%s, msg_id=%d", mqtt2gpio_topic, msg_id);
-        //snprintf(topic, sizeof topic, "/%s/test/qos1", mqtt_module_config.host);
-        //msg_id = esp_mqtt_client_subscribe(client, topic, 1);
-        //ESP_LOGI(TAG, "sent subscribe successful, topic=%s, msg_id=%d", topic, msg_id);
-        //snprintf(topic, sizeof topic, "/%s/test/qos1", mqtt_module_config.host);
-        //msg_id = esp_mqtt_client_unsubscribe(client, topic);
-        //ESP_LOGI(TAG, "sent unsubscribe successful, topic=%s, msg_id=%d", topic, msg_id);
-        break;
-    case MQTT_EVENT_DISCONNECTED:
-        ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
-        break;
-    case MQTT_EVENT_SUBSCRIBED:
-        ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
-        //snprintf(topic, sizeof topic, "/%s/test/qos0", mqtt_module_config.host);
-        //msg_id = esp_mqtt_client_publish(client, topic, "data", 0, 0, 0);
-        //ESP_LOGI(TAG, "sent publish successful, topic=%s, msg_id=%d", topic, msg_id);
-        break;
-    case MQTT_EVENT_UNSUBSCRIBED:
-        ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
-        break;
-    case MQTT_EVENT_PUBLISHED:
-        ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
-        break;
-    case MQTT_EVENT_DATA: {
-            ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-            printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
-            printf("DATA=%.*s\r\n", event->data_len, event->data);
-
-            cJSON *data = cJSON_Parse(event->data);
-            int pin = cJSON_GetObjectItem(data, "pin")->valueint;
-            int state = cJSON_GetObjectItem(data, "state")->valueint;
-            cJSON_Delete(data);
-            ESP_LOGI(TAG, "MQTT2GPIO_EVENT, pinn=%d, state=%d", pin, state);
-            pin_state_msg_t msg = {
-                .pin = pin,
-                .state = state
-            };
-            if (xQueueSend(mqtt2gpio_queue, &msg, pdMS_TO_TICKS(100)) != pdTRUE)
-            {
-                ESP_LOGE(TAG, "send pin state message failed or timeout");
-            }
+        case MQTT_EVENT_CONNECTED:
+            ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
+            msg_id = esp_mqtt_client_subscribe(client, mqtt2gpio_topic, 0);
+            ESP_LOGI(TAG, "subscribe successful, topic=%s, msg_id=%d", mqtt2gpio_topic, msg_id);
+            msg_id = esp_mqtt_client_subscribe(client, mqtt2curtains_topic, 0);
+            ESP_LOGI(TAG, "subscribe successful, topic=%s, msg_id=%d", mqtt2curtains_topic, msg_id);
+            break;
+        case MQTT_EVENT_DISCONNECTED:
+            ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+            break;
+        case MQTT_EVENT_SUBSCRIBED:
+            ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
+            break;
+        case MQTT_EVENT_UNSUBSCRIBED:
+            ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
+            break;
+        case MQTT_EVENT_PUBLISHED:
+            ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
+            break;
+        case MQTT_EVENT_DATA: {
+            decode_mqtt_message(event);
+            break;
+        case MQTT_EVENT_ERROR:
+            ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
+            break;
+        default:
+            ESP_LOGI(TAG, "Other event id:%d", event->event_id);
+            break;
         }
-        break;
-    case MQTT_EVENT_ERROR:
-        ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
-        break;
-    default:
-        ESP_LOGI(TAG, "Other event id:%d", event->event_id);
-        break;
     }
     return ESP_OK;
+}
+
+void IOTMqtt::decode_mqtt_message(esp_mqtt_event_handle_t event) {
+    ESP_LOGD(TAG, "MQTT message received");
+    printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
+    printf("DATA=%.*s\r\n", event->data_len, event->data);
+    cJSON *data = cJSON_Parse(event->data);
+    if (data == NULL) {
+        return;
+    }
+    if (strstr(event->topic, "/gpio/command") != NULL) {
+        ESP_LOGD(TAG, "Decode gpio message");
+        int pin = cJSON_GetObjectItem(data, "pin")->valueint;
+        int state = cJSON_GetObjectItem(data, "state")->valueint;
+        ESP_LOGI(TAG, "MQTT2GPIO_EVENT, pinn=%d, state=%d", pin, state);
+        pin_state_msg_t msg = {
+            .pin = pin,
+            .state = state
+        };
+        if (xQueueSend(mqtt2gpio_queue, &msg, pdMS_TO_TICKS(100)) != pdTRUE)
+        {
+            ESP_LOGE(TAG, "send pin command message failed or timeout");
+        }
+    }
+    if (strstr(event->topic, "/curtains/command") != NULL) {
+        ESP_LOGD(TAG, "Decode curtains message");
+            int curtain = cJSON_GetObjectItem(data, "curtain")->valueint;
+            int command = cJSON_GetObjectItem(data, "command")->valueint;
+            int param1 = 0;
+            if (cJSON_GetObjectItem(data, "param1") != NULL) {
+                param1 = cJSON_GetObjectItem(data, "param1")->valueint;
+            }
+            int param2 = 0;
+            if (cJSON_GetObjectItem(data, "param2") != NULL) {
+                param2 = cJSON_GetObjectItem(data, "param2")->valueint;
+            }
+            ESP_LOGD(TAG, "Decode curtains message => decoded");
+            curtains_command_msg_t msg = {
+                .id = curtain,
+                .command = command,
+                .param1 = param1,
+                .param2 = param2
+            };
+            if (xQueueSend(IOTCurtains::curtains_command2executor_queue, &msg, pdMS_TO_TICKS(100)) != pdTRUE) {
+                ESP_LOGE(TAG, "send curtains command message failed or timeout");
+            }
+    }
+    cJSON_Delete(data);
 }
 
 void IOTMqtt::mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, esp_mqtt_event_handle_t event_data)
@@ -152,11 +184,6 @@ void IOTMqtt::gpio2mqtt_task()
 
 esp_err_t IOTMqtt::subscribe_to_gpio()
 {
-    if (mqtt2gpio_topic == NULL)
-    {
-        mqtt2gpio_topic = (char *)malloc(sizeof(char) * (50));
-    }
-    snprintf(mqtt2gpio_topic, 50, "/%s/gpio/command", mqtt_module_config.host);
     if (gpio2mqtt_queue == NULL)
     {
         gpio2mqtt_queue = xQueueCreate(5, sizeof(pin_state_msg_t));

@@ -120,7 +120,7 @@ curl -X POST "http://10.135.0.41/api/stepper/step?curtain=0&direction=1&steps=10
 ### set to position
 
 ```
-curl -X POST "http://10.135.0.41/api/stepper/move?position=70"
+curl -X POST "http://10.135.0.41/api/stepper/move?curtain=0&position=70"
 ```
 
 

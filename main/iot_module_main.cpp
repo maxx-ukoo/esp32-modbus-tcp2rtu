@@ -25,6 +25,9 @@ extern "C" {
     #include "esp_partition.h"
     #include "modbus\modbus_const.h"
 }
+
+
+
 #include "config/config.h"
 #include "gpio/gpio.h"
 #include "mqtt/mqtt.h"

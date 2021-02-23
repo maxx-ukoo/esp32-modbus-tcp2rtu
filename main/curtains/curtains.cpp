@@ -13,7 +13,7 @@ static const char *TAG = "CURTAINS";
 
 IOT4988Stepper* IOTCurtains::curtains[3];
 int IOTCurtains::curtains_count = 0;
-xQueueHandle IOTCurtains::command2executor_queue = NULL;
+xQueueHandle IOTCurtains::curtains_command2executor_queue = NULL;
 TaskHandle_t IOTCurtains::command_executor_task_xHandle = NULL;
 IOTCurtains::IOTCurtains(cJSON *config)
 {
@@ -23,13 +23,13 @@ IOTCurtains::IOTCurtains(cJSON *config)
 esp_err_t IOTCurtains::curtains_json_init(cJSON *config) {
     const cJSON *curtain = NULL;
     curtains_count = 0;
-    command2executor_queue = xQueueCreate(COMMAND_QUEUE_LENGTH, sizeof(curtains_command_msg_t));
-    if (!command2executor_queue) {
+    curtains_command2executor_queue = xQueueCreate(COMMAND_QUEUE_LENGTH, sizeof(curtains_command_msg_t));
+    if (!curtains_command2executor_queue) {
         ESP_LOGE(TAG, "create command2executor_queue queue failed");
         return ESP_FAIL;
     }
     if (command_executor_task_xHandle == NULL) {
-        command_executor_task_xHandle = (TaskHandle_t)xTaskCreate(IOTCurtains::curtains_command_executor_task, "curtains_command_executor_task", 4096, NULL, 5, NULL);
+        command_executor_task_xHandle = (TaskHandle_t)xTaskCreate(IOTCurtains::curtains_command_executor_task, "curtains_command_executor_task", 4096, NULL, 15, NULL);
         //mqtt2gpio_task_xHandle = (TaskHandle_t)xTaskCreate((TaskFunction_t)mqtt2gpio_task, "mqtt2gpio_task", 2048, NULL, 10, NULL);
     }
 
@@ -48,7 +48,7 @@ esp_err_t IOTCurtains::curtains_json_init(cJSON *config) {
             .command = COMMAND_CALIBRATE,
             .param1 = lenght
         };
-        if (xQueueSend(command2executor_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) != pdTRUE) {
+        if (xQueueSend(curtains_command2executor_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) != pdTRUE) {
                 ESP_LOGE(TAG, "send flow control message failed or timeout");
         }
         ESP_LOGI(TAG, "Curtain initialized, count: %d, lenght: %d", curtains_count, lenght);
@@ -81,7 +81,7 @@ esp_err_t IOTCurtains::step(int curtain, int direction, int steps) {
         .param1 = direction,
         .param2 = steps
     };
-    if (xQueueSend(command2executor_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) != pdTRUE) {
+    if (xQueueSend(IOTCurtains::curtains_command2executor_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) != pdTRUE) {
         ESP_LOGE(TAG, "send flow control message failed or timeout");
         return ESP_FAIL;
     }
@@ -94,7 +94,7 @@ esp_err_t IOTCurtains::calibrate(int curtain) {
         .command = COMMAND_CALIBRATE,
         .param1 = 0
     };
-    if (xQueueSend(command2executor_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) != pdTRUE) {
+    if (xQueueSend(curtains_command2executor_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) != pdTRUE) {
         ESP_LOGE(TAG, "send flow control message failed or timeout");
         return ESP_FAIL;
     }
@@ -107,7 +107,7 @@ esp_err_t IOTCurtains::move(int curtain, int position) {
         .command = COMMAND_MOVE,
         .param1 = position
     };
-    if (xQueueSend(command2executor_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) != pdTRUE) {
+    if (xQueueSend(curtains_command2executor_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) != pdTRUE) {
         ESP_LOGE(TAG, "send flow control message failed or timeout");
         return ESP_FAIL;
     }
@@ -127,7 +127,7 @@ void IOTCurtains::curtains_command_executor_task(void *pvParameters) {
     int bytes;
     char tx_buffer[128];
     while (1) {
-        if (xQueueReceive(command2executor_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) == pdTRUE) {
+        if (xQueueReceive(curtains_command2executor_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) == pdTRUE) {
             ESP_LOGI(TAG, "Curtains command received, id: %d, command: %d, param1: %d, param2: %d", msg.id, msg.command, msg.param1, msg.param2);
             if (msg.command == COMMAND_CALIBRATE) {
                 if (curtains[msg.id] != NULL) {
@@ -146,7 +146,7 @@ void IOTCurtains::curtains_command_executor_task(void *pvParameters) {
             }
             ESP_LOGI(TAG, "Curtains command finished");
         } else {
-            vTaskDelay(1);
+            vTaskDelay(10);
         }
     }
     vTaskDelete(NULL);

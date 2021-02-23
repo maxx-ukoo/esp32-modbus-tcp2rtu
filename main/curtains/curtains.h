@@ -24,13 +24,14 @@ class IOTCurtains
 private:
     static IOT4988Stepper* curtains[3];
     static int curtains_count;
-    static xQueueHandle command2executor_queue;
     static TaskHandle_t command_executor_task_xHandle;
     static void curtains_command_executor_task(void *pvParameters);
     IOTCurtains(const IOTCurtains&);
     IOTCurtains& operator =(const IOTCurtains&);
+    
 
 public:
+    static xQueueHandle curtains_command2executor_queue;
     /**
      * @brief Constructor for IOTCurtains class
      * @param curtains JSON object with parameters

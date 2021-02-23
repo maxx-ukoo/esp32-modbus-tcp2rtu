@@ -26,6 +26,7 @@ class IOTMqtt {
         static esp_mqtt_client_handle_t client;
         static mqtt_config_t mqtt_module_config;
         static char *mqtt2gpio_topic;
+        static char *mqtt2curtains_topic;
         static xQueueHandle gpio2mqtt_queue;
         static xQueueHandle mqtt2gpio_queue;
         static TaskHandle_t health_status_task_handle;
@@ -36,6 +37,7 @@ class IOTMqtt {
         static esp_err_t subscribe_to_gpio();
         static void health_status_task(void *pvParameter);
         static esp_err_t start_mqtt_client();
+        static void decode_mqtt_message(esp_mqtt_event_handle_t event);
     public:
         IOTMqtt(cJSON *curtains);
         static esp_err_t mqtt_json_init(cJSON *gpio);
