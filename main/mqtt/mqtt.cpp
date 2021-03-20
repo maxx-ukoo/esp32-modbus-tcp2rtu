@@ -184,9 +184,10 @@ void IOTMqtt::gpio2mqtt_task()
 
 esp_err_t IOTMqtt::subscribe_to_gpio()
 {
-    if (gpio2mqtt_queue == NULL)
+    if (gpio2mqtt_queue == NULL || mqtt2gpio_queue == NULL)
     {
         gpio2mqtt_queue = xQueueCreate(5, sizeof(pin_state_msg_t));
+        mqtt2gpio_queue = xQueueCreate(5, sizeof(pin_state_msg_t));
         BaseType_t ret = xTaskCreate((TaskFunction_t)gpio2mqtt_task, "gpio2mqtt_task", 4096, NULL, 5, NULL);
         if (ret != pdTRUE)
         {
@@ -194,6 +195,7 @@ esp_err_t IOTMqtt::subscribe_to_gpio()
             return ESP_FAIL;
         }
     }
+
     IOTGpio::set_mqtt_gpio_evt_queue(gpio2mqtt_queue, mqtt2gpio_queue);
     return ESP_OK;
 }

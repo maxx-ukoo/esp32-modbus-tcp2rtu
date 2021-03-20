@@ -115,7 +115,7 @@ esp_err_t IOTGpio::gpio_start() {
     }
     if (gpio_task_xHandle == NULL) {
         ESP_LOGD(GPIO_TAG, "GPIO TASK created");
-        gpio_task_xHandle = (TaskHandle_t)xTaskCreate((TaskFunction_t)gpio_task, "gpio_task", 2048, NULL, 10, NULL);
+        gpio_task_xHandle = (TaskHandle_t)xTaskCreate((TaskFunction_t)gpio_task, "gpio_task", 4096, NULL, 10, NULL);
     }
     ESP_LOGD(GPIO_TAG, "esr_service_status: %d", esr_service_status);
     if (esr_service_status != ESP_OK) {
@@ -198,29 +198,63 @@ void IOTGpio::set_mqtt_gpio_evt_queue(xQueueHandle gpio2mqtt_queue_handler, xQue
     mqtt2gpio_queue = mqtt2gpio_queue_handler;
     if (mqtt2gpio_task_xHandle == NULL) {
         ESP_LOGD(GPIO_TAG, "GPIO TASK creating");
-        mqtt2gpio_task_xHandle = (TaskHandle_t)xTaskCreate((TaskFunction_t)mqtt2gpio_task, "mqtt2gpio_task", 2048, NULL, 10, NULL);
+        mqtt2gpio_task_xHandle = (TaskHandle_t)xTaskCreate((TaskFunction_t)mqtt2gpio_task, "mqtt2gpio_task", 4096, NULL, 10, NULL);
+    }
+}
+
+void IOTGpio::sendIoState(int io_num, int io_state) {
+    if (gpio2mqtt_queue != NULL) {
+        pin_state_msg_t msg = {
+            .pin = io_num,
+            .state = io_state
+        };
+        ESP_LOGD(GPIO_TAG, "GPIO[%d] intr message sending, val:%d", io_num, io_state);
+        if (xQueueSend(gpio2mqtt_queue, &msg, pdMS_TO_TICKS(100)) != pdTRUE) {
+            ESP_LOGE(GPIO_TAG, "send pin state message failed or timeout");
+        }  
     }
 }
 
 void IOTGpio::gpio_task(void* arg)
 {
     int io_num;
+    int delay = portMAX_DELAY;
+
+    int last_io_num = -1;
+    int last_io_state = 0;
     for(;;) {
-        if(xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY)) {
+        if (pdTRUE == xQueueReceive(gpio_evt_queue, &io_num, delay)) {
             ESP_LOGD(GPIO_TAG, "GPIO[%d] intr, val:%d", io_num, gpio_get_level((gpio_num_t)io_num));
-            //printf("GPIO[%d] intr, val: %d\n", io_num, gpio_get_level(io_num));
-            if (gpio2mqtt_queue != NULL) {
-                pin_state_msg_t msg = {
-                    .pin = io_num,
-                    .state = gpio_get_level((gpio_num_t)io_num)
-                };
-                if (xQueueSend(gpio2mqtt_queue, &msg, pdMS_TO_TICKS(100)) != pdTRUE) {
-                    ESP_LOGE(GPIO_TAG, "send pin state message failed or timeout");
-                }                
+            int current_state = gpio_get_level((gpio_num_t)io_num);
+            if (last_io_num != -1) {
+                if (last_io_num != io_num) { // pin chaged, send last state for last pin 
+                    ESP_LOGD(GPIO_TAG, "GPIO[%d] intr message if1, val:%d", io_num, current_state);
+                    sendIoState(last_io_num, last_io_state);
+                    last_io_num = io_num;
+                    last_io_state = current_state;
+                } else if (last_io_state != current_state) { // state changed, send old state
+                    ESP_LOGD(GPIO_TAG, "GPIO[%d] intr message if2, val:%d", io_num, current_state);
+                    sendIoState(last_io_num, last_io_state);
+                    last_io_num = io_num;
+                    last_io_state = current_state;
+                } else {
+                    // the same state for the same pin, skip
+                }
+            } else {
+                ESP_LOGD(GPIO_TAG, "GPIO[%d] intr message if3, val:%d", io_num, current_state);
+                last_io_num = io_num;
+                last_io_state = current_state;
+                sendIoState(last_io_num, last_io_state); // send state to avoid delay
             }
+            delay = 50;
+        } else {
+            // timeout, state already processed
+            last_io_num = -1;
+            delay = portMAX_DELAY;
         }
     }
 }
+
 
 int IOTGpio::getPinIndex(int id)
 {
@@ -402,6 +436,8 @@ esp_err_t IOTGpio::setPinState(int pin, int state)
         //ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, state);
         //ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);
 
+        ESP_LOGD(GPIO_TAG, "Duty for channel 1 before update %d", ledc_get_duty(ledc_channel1.speed_mode, ledc_channel1.channel));
+        ESP_LOGD(GPIO_TAG, "Duty for channel 2 before update %d", ledc_get_duty(ledc_channel2.speed_mode, ledc_channel2.channel));
         if (gpioConfig[idx][PWM_CHANNEL] == 1) {
             ESP_LOGI(GPIO_TAG, "Update PWM for channel 1");
             //ledc_set_fade_step_and_start()
@@ -413,6 +449,9 @@ esp_err_t IOTGpio::setPinState(int pin, int state)
             ledc_set_fade_with_time(ledc_channel2.speed_mode, ledc_channel2.channel, state, 1000);
             ledc_fade_start(ledc_channel2.speed_mode,ledc_channel2.channel, LEDC_FADE_NO_WAIT);
         }
+        
+        ESP_LOGD(GPIO_TAG, "Duty for channel 1 after update %d", ledc_get_duty(ledc_channel1.speed_mode, ledc_channel1.channel));
+        ESP_LOGD(GPIO_TAG, "Duty for channel 2 after update %d", ledc_get_duty(ledc_channel2.speed_mode, ledc_channel2.channel));
         return ESP_OK;
     }
 

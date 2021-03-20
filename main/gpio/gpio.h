@@ -38,7 +38,7 @@ class IOTGpio {
         static ledc_channel_config_t ledc_channel1;
         static ledc_channel_config_t ledc_channel2;
         static ledc_timer_config_t ledc_timer1;
-
+        static void sendIoState(int io_num, int io_state);
         static xQueueHandle gpio_evt_queue;
         static TaskHandle_t gpio_task_xHandle;
         static TaskHandle_t mqtt2gpio_task_xHandle;

@@ -314,7 +314,7 @@ esp_err_t IOTModbus::initialize_flow_control(void)
         ESP_LOGE(MODBUS_TAG, "create rtu2tcp_queue queue failed");
         return ESP_FAIL;
     }
-    BaseType_t ret = xTaskCreate(IOTModbus::eth2rtu_flow_control_task, "flow_ctl", 2048, NULL, (tskIDLE_PRIORITY + 2), NULL);
+    BaseType_t ret = xTaskCreate(IOTModbus::eth2rtu_flow_control_task, "flow_ctl", 4096, NULL, (tskIDLE_PRIORITY + 2), NULL);
     if (ret != pdTRUE) {
         ESP_LOGE(MODBUS_TAG, "create tcp2rtu_queue task failed");
         return ESP_FAIL;
