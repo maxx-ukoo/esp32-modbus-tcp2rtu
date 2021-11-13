@@ -91,6 +91,8 @@ void IOTModbus::modbus_tcp_slave_task(void *pvParameters)
     char addr_str[128];
     int addr_family;
     int ip_protocol;
+    int clients[4];
+    int current_client = 0;
 
     struct sockaddr_in dest_addr;
     dest_addr.sin_addr.s_addr = htonl(INADDR_ANY);

@@ -10,6 +10,7 @@ extern "C" {
 #include "driver/ledc.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 
 #define GPIO_NUMBER 15
 
@@ -47,6 +48,7 @@ class IOTGpio {
         static esp_err_t esr_service_status;
         static xQueueHandle gpio2mqtt_queue;
         static xQueueHandle mqtt2gpio_queue;
+        static SemaphoreHandle_t xMutex;
 
         static void mqtt2gpio_task(void* arg);
         static bool configure_pin(int gpioPin, int mode, int pull_up, int pull_down);
@@ -71,13 +73,6 @@ class IOTGpio {
     ~IOTGpio(void);
 
 };
-
-/*cJSON * getGpioConfig();
-
-cJSON * getGpioState();
-esp_err_t setPinState(int pin, int state);
-esp_err_t reserve_pin_state(int pin, int state);
-void set_mqtt_gpio_evt_queue(xQueueHandle gpio2mqtt_queue_handler, xQueueHandle mqtt2gpio_queue_handler);*/
 
 #ifdef __cplusplus
 }

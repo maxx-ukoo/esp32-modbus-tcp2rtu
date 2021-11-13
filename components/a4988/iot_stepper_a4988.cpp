@@ -5,7 +5,7 @@ extern "C"
 
 #include "iot_stepper_a4988.h"
 #include "driver/gpio.h"
-//#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"

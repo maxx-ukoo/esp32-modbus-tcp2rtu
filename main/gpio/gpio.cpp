@@ -13,9 +13,9 @@ extern "C"
 }
 #endif
 
-
-
 static const char *GPIO_TAG = "GPIO Tag";
+
+
 
 int IOTGpio::gpioConfig[GPIO_NUMBER][6] = {
                 {2, -1, 0, 0, MODE_INPUT | MODE_OUTPUT | MODE_PWM, 0},
@@ -66,6 +66,7 @@ esp_err_t IOTGpio::fade_service_status = ESP_FAIL;
 esp_err_t IOTGpio::esr_service_status = ESP_FAIL;
 xQueueHandle IOTGpio::gpio2mqtt_queue = NULL;
 xQueueHandle IOTGpio::mqtt2gpio_queue = NULL;
+SemaphoreHandle_t IOTGpio::xMutex = NULL;
 
 IOTGpio::IOTGpio(cJSON *config)
 {
@@ -75,6 +76,9 @@ IOTGpio::IOTGpio(cJSON *config)
 esp_err_t IOTGpio::gpio_json_init(cJSON *gpio, bool checkReservedPins)
 {
     const cJSON *pin = NULL;
+    if( xMutex == NULL ) {
+        xMutex = xSemaphoreCreateMutex();
+    }
     ESP_LOGD(GPIO_TAG, "Init gpio from JSON");
     cJSON_ArrayForEach(pin, gpio)
     {
@@ -370,9 +374,17 @@ int IOTGpio::readPinState(int pin)
         return gpio_get_level((gpio_num_t)pin);
     } else if (gpioConfig[idx][MODE] == MODE_PWM) {
         if (gpioConfig[idx][PWM_CHANNEL] == 1) {
-            return ledc_get_duty(ledc_channel1.speed_mode, ledc_channel1.channel);
+            int duty = ledc_get_duty(ledc_channel1.speed_mode, ledc_channel1.channel);
+            if (duty > 1024) {
+                ESP_LOGD(GPIO_TAG, "Duty for channel 1 OVF: %d", duty);
+            }
+            return duty;
         } else {
-            return ledc_get_duty(ledc_channel2.speed_mode, ledc_channel2.channel);
+            int duty = ledc_get_duty(ledc_channel2.speed_mode, ledc_channel2.channel);
+            if (duty > 1024) {
+                ESP_LOGD(GPIO_TAG, "Duty for channel 2 OVF: %d", duty);
+            }
+            return duty;
         }
     } else if (gpioConfig[idx][MODE] == MODE_INPUT) {
         return gpio_get_level((gpio_num_t)pin);
@@ -433,6 +445,7 @@ esp_err_t IOTGpio::setPinState(int pin, int state)
         gpio_set_level((gpio_num_t)pin, state);
         return ESP_OK;
     } else if (gpioConfig[idx][MODE] == MODE_PWM) {
+        xSemaphoreTake( xMutex, portMAX_DELAY );
         //ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, state);
         //ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);
 
@@ -442,16 +455,16 @@ esp_err_t IOTGpio::setPinState(int pin, int state)
             ESP_LOGI(GPIO_TAG, "Update PWM for channel 1");
             //ledc_set_fade_step_and_start()
             //ledc_set_fade_step_and_start(ledc_channel1.speed_mode, ledc_channel1.channel, state, 1, 1, LEDC_FADE_NO_WAIT);
-            ledc_set_fade_with_time(ledc_channel1.speed_mode, ledc_channel1.channel, state, 1000);
-            ledc_fade_start(ledc_channel1.speed_mode,ledc_channel1.channel, LEDC_FADE_NO_WAIT);
+            ledc_set_fade_with_time(ledc_channel1.speed_mode, ledc_channel1.channel, state, 300);
+            ledc_fade_start(ledc_channel1.speed_mode,ledc_channel1.channel, LEDC_FADE_WAIT_DONE);
         } else {
             ESP_LOGI(GPIO_TAG, "Update PWM for channel 2");
-            ledc_set_fade_with_time(ledc_channel2.speed_mode, ledc_channel2.channel, state, 1000);
-            ledc_fade_start(ledc_channel2.speed_mode,ledc_channel2.channel, LEDC_FADE_NO_WAIT);
+            ledc_set_fade_with_time(ledc_channel2.speed_mode, ledc_channel2.channel, state, 300);
+            ledc_fade_start(ledc_channel2.speed_mode,ledc_channel2.channel, LEDC_FADE_WAIT_DONE);
         }
-        
         ESP_LOGD(GPIO_TAG, "Duty for channel 1 after update %d", ledc_get_duty(ledc_channel1.speed_mode, ledc_channel1.channel));
         ESP_LOGD(GPIO_TAG, "Duty for channel 2 after update %d", ledc_get_duty(ledc_channel2.speed_mode, ledc_channel2.channel));
+        xSemaphoreGive( xMutex );
         return ESP_OK;
     }
 
