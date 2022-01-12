@@ -158,9 +158,13 @@ void components_start(void) {
     IOTCurtains::curtains_json_init(curtains);
     cJSON *gpio = cJSON_GetObjectItem(config, "gpio");
     IOTGpio::gpio_json_init(gpio, false);
+    cJSON *pcf8574 = cJSON_GetObjectItem(config, "pcf8574");
+    IOTGpio::gpio_jsonextender_init(pcf8574);
     cJSON *mqtt = cJSON_GetObjectItem(config, "mqtt");
     IOTMqtt::mqtt_json_init(mqtt);
     cJSON_Delete(config);
+
+    IOTConfig::writeGpioConfig();
 }
 
 static void initialize_sntp(void)

@@ -35,7 +35,6 @@ mqtt_config_t IOTMqtt::init_with_default_config()
 esp_err_t IOTMqtt::mqtt_json_init(cJSON *config)
 {
 
-
     ESP_LOGD(TAG, "Init MQTT from JSON");
     if (mqtt_module_config.broker == NULL)
     {

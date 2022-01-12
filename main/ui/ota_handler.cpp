@@ -360,7 +360,7 @@ esp_err_t upload_file_handler(httpd_req_t *req)
      * the size of the file being uploaded */
 	//int remaining = req->content_len;
 
-	char ota_buff[1024];
+	char ota_buff[1025];
 	char *body_start_p;
 	int content_length = req->content_len;
 	int content_received = 0;
@@ -378,7 +378,7 @@ esp_err_t upload_file_handler(httpd_req_t *req)
 	do
 	{
 		/* Read the data for the request */
-		if ((recv_len = httpd_req_recv(req, ota_buff, MIN(content_length, sizeof(ota_buff)))) < 0)
+		if ((recv_len = httpd_req_recv(req, ota_buff, MIN(content_length, 1024))) < 0)
 		{
 			if (recv_len == HTTPD_SOCK_ERR_TIMEOUT)
 			{
@@ -395,6 +395,7 @@ esp_err_t upload_file_handler(httpd_req_t *req)
 			return ESP_FAIL;
 		}
 
+		ota_buff[recv_len] = 0;
 		ESP_LOGD(REST_TAG, "Received %d  bytes", recv_len);
 		ESP_LOGD(REST_TAG, "Buffer: %s", ota_buff);
 
@@ -429,7 +430,9 @@ esp_err_t upload_file_handler(httpd_req_t *req)
 		ESP_LOGD(REST_TAG, "Data_len: %d", data_len);
 
 		int file_len = calculate_data_lenght(body_start_p, data_len, boundary_start_p, boundary_len);
-		printf("Result: %d, tmp_size=%d\n", file_len, tmp_size);
+		printf("Result: file_len=%d, tmp_size=%d, data_len=%d\n", file_len, tmp_size, data_len);
+		ESP_LOGD(REST_TAG, "Current body: >%s<", body_start_p);
+		ESP_LOGD(REST_TAG, "Current tmp_buf: >%s<", tmp_buf);
 		if (file_len == data_len && tmp_size > 0)
 		{
 			ESP_LOGD(REST_TAG, "Save %d bytes from prev section", tmp_size);
@@ -455,25 +458,29 @@ esp_err_t upload_file_handler(httpd_req_t *req)
 			{
 				tmp_buf[tmp_size] = body_start_p[n];
 				tmp_size++;
+				tmp_buf[tmp_size] = 0;
 			}
+			ESP_LOGD(REST_TAG, "Current tmp storage: >%s<", tmp_buf);
 		}
 		else
 		{
-			ESP_LOGD(REST_TAG, "File received no extra data nin buffer, break");
+			ESP_LOGD(REST_TAG, "File received no extra data in buffer, break");
 			ESP_LOGD(REST_TAG, "Save %d bytes from prev section", tmp_size);
+			ESP_LOGD(REST_TAG, "Prev section context: >%s<", tmp_buf);
+			ESP_LOGD(REST_TAG, "This buffer contains boundary, just ignorw this buffer"); // TODO check this
 			/* Write buffer content to file on storage */
-			if (tmp_size && (tmp_size != fwrite(tmp_buf, 1, tmp_size, fd)))
-			{
+			//if (tmp_size && (tmp_size != fwrite(tmp_buf, 1, tmp_size, fd)))
+			//{
 				/* Couldn't write everything to file!
 					* Storage may be full? */
-				fclose(fd);
-				unlink(tmp_filename);
+			//	fclose(fd);
+			//	unlink(tmp_filename);
 
-				ESP_LOGE(REST_TAG, "File write failed!");
+			//	ESP_LOGE(REST_TAG, "File write failed!");
 				/* Respond with 500 Internal Server Error */
-				httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write file to storage");
-				return ESP_FAIL;
-			}
+			//	httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write file to storage");
+			//	return ESP_FAIL;
+			//}
 			break;
 		}
 
