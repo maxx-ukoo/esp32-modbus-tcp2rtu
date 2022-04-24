@@ -40,9 +40,6 @@ esp_err_t IOTCurtains::curtains_json_init(cJSON *config) {
         int io_hi_pos = cJSON_GetObjectItemCaseSensitive(curtain, "io_hi_pos")->valueint;
         int lenght = cJSON_GetObjectItemCaseSensitive(curtain, "lenght")->valueint;
         curtains[curtains_count] = new IOT4988Stepper(io_step, io_dir, io_hi_pos);
-        IOTGpio::reservePin(io_step, MODE_CURTAINS);
-        IOTGpio::reservePin(io_dir, MODE_CURTAINS);
-        IOTGpio::reservePin(io_hi_pos, MODE_CURTAINS);
         curtains_command_msg_t msg = {
             .id = curtains_count,
             .command = COMMAND_CALIBRATE,
@@ -151,4 +148,18 @@ void IOTCurtains::curtains_command_executor_task(void *pvParameters) {
     }
     vTaskDelete(NULL);
 
+}
+
+esp_err_t IOTCurtains::command(int curtain, int command, int param1, int param2) {
+    curtains_command_msg_t msg = {
+        .id = curtain,
+        .command = command,
+        .param1 = param1,
+        .param2 = param2
+    };
+    if (xQueueSend(IOTCurtains::curtains_command2executor_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) != pdTRUE) {
+        ESP_LOGE(TAG, "send flow control message failed or timeout");
+        return ESP_FAIL;
+    }
+    return ESP_OK;
 }

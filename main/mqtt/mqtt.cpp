@@ -8,7 +8,7 @@ extern "C"
 #ifdef __cplusplus
 }
 #endif
-#include "gpio/gpio.h"
+
 #include "curtains/curtains.h"
 #include "time_utils.h"
 
@@ -17,10 +17,10 @@ static const char *TAG = "MQTT Tag";
 esp_mqtt_client_handle_t IOTMqtt::client = NULL;
 char *IOTMqtt::mqtt2gpio_topic = NULL;
 char *IOTMqtt::mqtt2curtains_topic = NULL;
-xQueueHandle IOTMqtt::gpio2mqtt_queue = NULL;
-xQueueHandle IOTMqtt::mqtt2gpio_queue = NULL;
 TaskHandle_t IOTMqtt::health_status_task_handle = NULL;
 mqtt_config_t IOTMqtt::mqtt_module_config;
+void (*IOTMqtt::gpio_command_cb)(int, int) = NULL;
+void (*IOTMqtt::curtains_cb_manager)(int, int, int, int) = NULL;
 
 mqtt_config_t IOTMqtt::init_with_default_config()
 {
@@ -115,13 +115,9 @@ void IOTMqtt::decode_mqtt_message(esp_mqtt_event_handle_t event) {
         int pin = cJSON_GetObjectItem(data, "pin")->valueint;
         int state = cJSON_GetObjectItem(data, "state")->valueint;
         ESP_LOGI(TAG, "MQTT2GPIO_EVENT, pinn=%d, state=%d", pin, state);
-        pin_state_msg_t msg = {
-            .pin = pin,
-            .state = state
-        };
-        if (xQueueSend(mqtt2gpio_queue, &msg, pdMS_TO_TICKS(100)) != pdTRUE)
-        {
-            ESP_LOGE(TAG, "send pin command message failed or timeout");
+        if (gpio_command_cb != NULL) {
+            ESP_LOGI(TAG, "MQTT2GPIO_EVENT CB, pinn=%d, state=%d", pin, state);
+            gpio_command_cb(pin, state);
         }
     }
     if (strstr(event->topic, "/curtains/command") != NULL) {
@@ -137,14 +133,9 @@ void IOTMqtt::decode_mqtt_message(esp_mqtt_event_handle_t event) {
                 param2 = cJSON_GetObjectItem(data, "param2")->valueint;
             }
             ESP_LOGD(TAG, "Decode curtains message => decoded");
-            curtains_command_msg_t msg = {
-                .id = curtain,
-                .command = command,
-                .param1 = param1,
-                .param2 = param2
-            };
-            if (xQueueSend(IOTCurtains::curtains_command2executor_queue, &msg, pdMS_TO_TICKS(100)) != pdTRUE) {
-                ESP_LOGE(TAG, "send curtains command message failed or timeout");
+            if (curtains_cb_manager != NULL) {
+                ESP_LOGI(TAG, "MQTT2CURTAINS_EVENT CB, curtain=%d, command=%d, param1=%d, aram2=%d", curtain, command, param1, param2);
+                curtains_cb_manager(curtain, command, param1, param2);
             }
     }
     cJSON_Delete(data);
@@ -156,47 +147,15 @@ void IOTMqtt::mqtt_event_handler(void *handler_args, esp_event_base_t base, int3
     mqtt_event_handler_cb(event_data);
 }
 
-void IOTMqtt::gpio2mqtt_task()
+void IOTMqtt::gpio_update_state_cb(int pin, int state)
 {
-    pin_state_msg_t msg;
-    for (;;)
-    {
-        if (gpio2mqtt_queue != NULL)
-        {
-            if (xQueueReceive(gpio2mqtt_queue, &msg, portMAX_DELAY))
-            {
-                ESP_LOGD(TAG, "MQTT received GPIO[%d] intr, val:%d", msg.pin, msg.state);
-                char topic[50];
-                char data[10];
-                snprintf(topic, sizeof topic, "/%s/gpio/state/%d", mqtt_module_config.host, msg.pin);
-                snprintf(data, sizeof data, "%d", msg.state);
-                int msg_id = esp_mqtt_client_publish(client, topic, data, 0, 0, 0);
-                ESP_LOGI(TAG, "sent publish successful, topic=%s, msg_id=%d", topic, msg_id);
-            }
-        }
-        else
-        {
-            vTaskDelay(50);
-        }
-    }
-}
-
-esp_err_t IOTMqtt::subscribe_to_gpio()
-{
-    if (gpio2mqtt_queue == NULL || mqtt2gpio_queue == NULL)
-    {
-        gpio2mqtt_queue = xQueueCreate(5, sizeof(pin_state_msg_t));
-        mqtt2gpio_queue = xQueueCreate(5, sizeof(pin_state_msg_t));
-        BaseType_t ret = xTaskCreate((TaskFunction_t)gpio2mqtt_task, "gpio2mqtt_task", 4096, NULL, 5, NULL);
-        if (ret != pdTRUE)
-        {
-            ESP_LOGE(TAG, "create gpio2mqtt_task task failed");
-            return ESP_FAIL;
-        }
-    }
-
-    IOTGpio::set_mqtt_gpio_evt_queue(gpio2mqtt_queue, mqtt2gpio_queue);
-    return ESP_OK;
+        ESP_LOGD(TAG, "MQTT received GPIO[%d] intr, val:%d", pin, state);
+        char topic[50];
+        char data[10];
+        snprintf(topic, sizeof topic, "/%s/gpio/state/%d", mqtt_module_config.host, pin);
+        snprintf(data, sizeof data, "%d", state);
+        int msg_id = esp_mqtt_client_publish(client, topic, data, 0, 0, 0);
+        ESP_LOGI(TAG, "sent publish successful, topic=%s, msg_id=%d", topic, msg_id);
 }
 
 void IOTMqtt::health_status_task(void *pvParameter)
@@ -212,8 +171,8 @@ void IOTMqtt::health_status_task(void *pvParameter)
 
         cJSON *root = cJSON_CreateObject();
         cJSON_AddNumberToObject(root, "status", esp_get_free_heap_size());
-        cJSON *res = IOTGpio::getGpioState();
-        cJSON_AddItemToObject(root, "gpio", res);
+        /*cJSON *res = IOTGpio::getGpioState();
+        cJSON_AddItemToObject(root, "gpio", res);*/
 
         const char *status_body = cJSON_Print(root);
         snprintf(topic, sizeof topic, "/%s/module/state", mqtt_module_config.host);
@@ -239,7 +198,7 @@ esp_err_t IOTMqtt::start_mqtt_client()
     esp_err_t ret = esp_mqtt_client_start(client);
     if (ret == ESP_OK)
     {
-        subscribe_to_gpio();
+        //subscribe_to_gpio();
         if (health_status_task_handle == NULL)
         {
             xTaskCreate(&health_status_task, "health_status_task", 10000, NULL, 5, NULL);

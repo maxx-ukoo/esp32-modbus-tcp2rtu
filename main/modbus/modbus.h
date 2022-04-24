@@ -16,7 +16,7 @@ class IOTModbus
         static xQueueHandle tcp2rtu_queue;
         static xQueueHandle rtu2tcp_queue;
     public:
-
+        static esp_err_t reserve_pins(esp_err_t (*func)(int, int));
         static esp_err_t modbus_start(int port_speed);
         static esp_err_t modbus_init(int port_speed);
         static void tcp_server_task(void *pvParameters);

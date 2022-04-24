@@ -57,6 +57,7 @@ extern "C"
 
     esp_err_t IOT4988Stepper::step(int direction, int steps)
     {
+        portMUX_TYPE myMutex = portMUX_INITIALIZER_UNLOCKED;
         if (direction > 0)
         {
             ESP_LOGD(TAG, "Stepper run, set direction to 0\n");
@@ -84,10 +85,12 @@ extern "C"
                 pstepper->current_position = pstepper->current_position + 1;
             }
             ESP_LOGD(TAG, "Checks passed, current step: %d\n", i);
+            taskENTER_CRITICAL(&myMutex);
             gpio_set_level((gpio_num_t)pstepper->step_io, 1);
-            ets_delay_us(1000);
+            ets_delay_us(2000);
             gpio_set_level((gpio_num_t)pstepper->step_io, 0);
             ets_delay_us(2000);
+            taskEXIT_CRITICAL(&myMutex);
             if (i % 500 == 0) {
                 vTaskDelay(1);
             }

@@ -24,12 +24,18 @@ extern "C" {
     #include "sdkconfig.h"
     #include "esp_partition.h"
     #include "modbus\modbus_const.h"
+    #include <i2cdev.h>
+    #include "mcp23xgpio\mcp23xgpio.h"
+
+    //#include "mbcontroller.h"       // for mbcontroller defines and api
+    //#include "mb.h"
+    //#include "modbus_params.h"      // for modbus parameters structures
+    //#include "esp_check.h"
+
 }
 
-
-
 #include "config/config.h"
-#include "gpio/gpio.h"
+#include "gpiov2/gpio_v2.h"
 #include "mqtt/mqtt.h"
 #include "ui/ui_server.h"
 #include "ui/ota_handler.h"
@@ -39,6 +45,22 @@ extern "C" {
 
 //#include <esp_https_server.h>
 
+#define MB_TCP_PORT_NUMBER  502
+#define MB_PAR_INFO_GET_TOUT                (10) // Timeout for get parameter info
+#define MB_CHAN_DATA_MAX_VAL                (10)
+#define MB_CHAN_DATA_OFFSET                 (1.1f)
+
+#define MB_READ_MASK (MB_EVENT_INPUT_REG_RD | MB_EVENT_HOLDING_REG_RD | MB_EVENT_DISCRETE_RD | MB_EVENT_COILS_RD)
+
+#define MB_WRITE_MASK (MB_EVENT_HOLDING_REG_WR | MB_EVENT_COILS_WR)
+
+#define MB_READ_WRITE_MASK  (MB_READ_MASK | MB_WRITE_MASK)
+
+#define SDA_GPIO 33
+#define SCL_GPIO 5
+#define INTA_1_GPIO 35
+#define INTB_2_GPIO 34
+
 // Make app_main look like a C function to the linker.
 extern "C" {
    void app_main(void);
@@ -46,7 +68,9 @@ extern "C" {
 
 static const char *TAG = "IOT DIN Module";
 static esp_netif_t *eth_netif = NULL;
-
+static GpioV2* gpio = new GpioV2();
+static Mcp23xGpio* mcp[8];
+static bool i2c_ok = false;
 
 static void connect_handler(void* arg, esp_event_base_t event_base, 
                             int32_t event_id, void* event_data)
@@ -150,21 +174,117 @@ esp_err_t init_fs(void)
     return ESP_OK;
 }
 
+void gpio_cb_manager(int pin, int state) {
+    if (gpio->set_pin_state(pin, state) == ESP_OK) {
+        ESP_LOGI(TAG, "Level set OK for GPIO");
+        return;
+    }
+    ESP_LOGI(TAG, "Set level to MCP23");
+    for (int i=0; i<8; i++) {
+        if (mcp[i] == 0) {
+            break;
+        }
+        if (mcp[i]->set_level(pin, state) == ESP_OK) {
+            break;
+        }
+    }
+}
+
+void curtains_cb_manager(int curtain, int command, int param1, int param2) {
+    IOTCurtains::command(curtain, command, param1, param2);
+}
+
 void components_start(void) {
     cJSON *config = IOTConfig::readConfig();
     cJSON *modbus = cJSON_GetObjectItem(config, "modbus");
-    ESP_ERROR_CHECK(IOTModbus::modbus_start(cJSON_GetObjectItem(modbus, "speed")->valueint));
+    ESP_LOGI(TAG, "Initializing GpioV2 5");
+    if (cJSON_GetObjectItem(modbus, "enable")->valueint) {
+        gpio->configure_pin(CONFIG_MB_UART_RXD, MODE_MODBUS);
+        gpio->configure_pin(CONFIG_MB_UART_TXD, MODE_MODBUS);
+        gpio->configure_pin(CONFIG_MB_UART_RTS, MODE_MODBUS);
+        ESP_ERROR_CHECK(IOTModbus::modbus_start(cJSON_GetObjectItem(modbus, "speed")->valueint));
+    }
+
     cJSON *curtains = cJSON_GetObjectItem(config, "curtains");
+    ESP_LOGI(TAG, "Initializing curtains");
+    int curtains_count = 0;
+    const cJSON *curtain = NULL;
+    cJSON_ArrayForEach(curtain, curtains)
+    {
+        int io_step = cJSON_GetObjectItemCaseSensitive(curtain, "io_step")->valueint;
+        int io_dir = cJSON_GetObjectItemCaseSensitive(curtain, "io_dir")->valueint;
+        int io_hi_pos = cJSON_GetObjectItemCaseSensitive(curtain, "io_hi_pos")->valueint;
+        gpio->configure_pin(io_step, MODE_CURTAINS);
+        gpio->configure_pin(io_dir, MODE_CURTAINS);
+        gpio->configure_pin(io_hi_pos, MODE_CURTAINS);
+        curtains_count++;
+    }
+    ESP_LOGI(TAG, "Found %d curtains", curtains_count);
     IOTCurtains::curtains_json_init(curtains);
-    cJSON *gpio = cJSON_GetObjectItem(config, "gpio");
-    IOTGpio::gpio_json_init(gpio, false);
-    cJSON *pcf8574 = cJSON_GetObjectItem(config, "pcf8574");
-    IOTGpio::gpio_jsonextender_init(pcf8574);
+    
+    cJSON *gpioConfig = cJSON_GetObjectItem(config, "gpio");
     cJSON *mqtt = cJSON_GetObjectItem(config, "mqtt");
     IOTMqtt::mqtt_json_init(mqtt);
-    cJSON_Delete(config);
 
-    IOTConfig::writeGpioConfig();
+    IOTMqtt::gpio_command_cb = &gpio_cb_manager;
+    IOTMqtt::curtains_cb_manager = &curtains_cb_manager;
+    
+    gpio->configure_pin(SDA_GPIO, MODE_I2C);
+    gpio->configure_pin(SCL_GPIO, MODE_I2C);
+
+
+    const cJSON *pin = NULL;
+    cJSON_ArrayForEach(pin, gpioConfig)
+    {
+        int gpioPin = cJSON_GetObjectItemCaseSensitive(pin, "id")->valueint;
+        int mode = cJSON_GetObjectItemCaseSensitive(pin, "mode")->valueint;
+        int pull_up = cJSON_GetObjectItemCaseSensitive(pin, "pull_up")->valueint;
+        int pull_down = cJSON_GetObjectItemCaseSensitive(pin, "pull_down")->valueint;
+        gpio->configure_pin(gpioPin, mode);
+    }
+
+    cJSON *gpioMCP = cJSON_GetObjectItem(config, "pcf8574");
+    const cJSON *mcpConfig = NULL;
+    int mcpNum = 0;
+    ESP_LOGI(TAG, "MCP check config");
+    cJSON_ArrayForEach(mcpConfig, gpioMCP)
+    {
+        int intIO = cJSON_GetObjectItemCaseSensitive(mcpConfig, "io_int")->valueint;
+        ESP_LOGI(TAG, "MCP start init 0");
+        gpio->configure_pin(intIO, MODE_EX_INT);
+        mcpNum++;
+    }
+    if (mcpNum > 0) {
+        ESP_LOGI(TAG, "I2C init");
+        if (i2cdev_init() == ESP_OK) {
+            i2c_ok = true;
+        }
+        ESP_LOGI(TAG, "I2C init finished");        
+    }
+    ESP_LOGI(TAG, "Initializing GpioV2");
+    gpio->state_cb = &IOTMqtt::gpio_update_state_cb;
+    gpio->start();
+
+    mcpNum = 0;
+    ESP_LOGI(TAG, "MCP starting");
+    cJSON_ArrayForEach(mcpConfig, gpioMCP)
+    {
+        int intIO = cJSON_GetObjectItemCaseSensitive(mcpConfig, "io_int")->valueint;
+        ESP_LOGI(TAG, "MCP start init 0");
+        int startIO = cJSON_GetObjectItemCaseSensitive(mcpConfig, "io_start")->valueint;
+        ESP_LOGI(TAG, "MCP start init 1");
+        int addrOffset = cJSON_GetObjectItemCaseSensitive(mcpConfig, "addr_offset")->valueint;
+        ESP_LOGI(TAG, "MCP start init 2");
+        int ioConfig = cJSON_GetObjectItemCaseSensitive(mcpConfig, "io_config")->valueint;
+        ESP_LOGI(TAG, "MCP start init 3");
+        ESP_LOGI(TAG, "Initializing MCP addr: %d, conf: %d, startIO: %d, intIO: %d", addrOffset, ioConfig, startIO, intIO);
+        mcp[mcpNum] = new Mcp23xGpio(addrOffset, ioConfig, startIO, (gpio_num_t)SDA_GPIO, (gpio_num_t)SCL_GPIO, (gpio_num_t)intIO);
+        ESP_LOGI(TAG, "MCP start init 4");
+        mcp[mcpNum]->state_cb = &IOTMqtt::gpio_update_state_cb;
+        ESP_LOGI(TAG, "MCP start init 5");
+        mcpNum++;
+    }
+
 }
 
 static void initialize_sntp(void)
@@ -182,12 +302,16 @@ void app_main(void)
 {
     static httpd_handle_t server = NULL;
     ESP_ERROR_CHECK(init_fs());
+    vTaskDelay(100);
+    
     // Initialize TCP/IP network interface (should be called only once in application)
     ESP_ERROR_CHECK(esp_netif_init());
     // Create default event loop that running in background
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+    
     esp_netif_config_t cfg = ESP_NETIF_DEFAULT_ETH();
     eth_netif = esp_netif_new(&cfg);
+    
     // Set default handlers to process TCP/IP stuffs
     ESP_ERROR_CHECK(esp_eth_set_default_handlers(eth_netif));
     // Register user defined event handers
@@ -204,19 +328,20 @@ void app_main(void)
     mac_config.smi_mdc_gpio_num = CONFIG_EXAMPLE_ETH_MDC_GPIO;
     mac_config.smi_mdio_gpio_num = CONFIG_EXAMPLE_ETH_MDIO_GPIO;
     esp_eth_mac_t *mac = esp_eth_mac_new_esp32(&mac_config);
-    esp_eth_phy_t *phy = esp_eth_phy_new_lan8720(&phy_config);
+    //esp_eth_phy_t *phy = esp_eth_phy_new_lan8720(&phy_config);
+    esp_eth_phy_t *phy = esp_eth_phy_new_lan87xx(&phy_config);
     esp_eth_config_t config = ETH_DEFAULT_CONFIG(mac, phy);
     esp_eth_handle_t eth_handle = NULL;
+    
     ESP_ERROR_CHECK(esp_eth_driver_install(&config, &eth_handle));
+    
     /* attach Ethernet driver to TCP/IP stack */
     ESP_ERROR_CHECK(esp_netif_attach(eth_netif, esp_eth_new_netif_glue(eth_handle)));
     /* start Ethernet driver state machine */
     ESP_ERROR_CHECK(esp_eth_start(eth_handle));
     
-    components_start();
-
     xTaskCreate(&ota_system_reboot_task, "ota_system_reboot_task", 2048, NULL, 5, NULL);
     
     initialize_sntp();
-
+    components_start();
 }

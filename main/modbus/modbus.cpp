@@ -16,7 +16,7 @@ extern "C"
 }
 #endif
 
-#include "gpio/gpio.h"
+#include "gpiov2/gpio_v2.h"
 
 
 static const char *MODBUS_TAG = "modbus";
@@ -29,6 +29,13 @@ static const char *MODBUS_TAG = "modbus";
 
 xQueueHandle IOTModbus::tcp2rtu_queue = NULL;
 xQueueHandle IOTModbus::rtu2tcp_queue = NULL;
+
+esp_err_t IOTModbus::reserve_pins(esp_err_t (*func)(int, int)) {
+    func(CONFIG_MB_UART_RXD, MODE_MODBUS);
+    func(CONFIG_MB_UART_TXD, MODE_MODBUS);
+    func(CONFIG_MB_UART_RTS, MODE_MODBUS);
+    return ESP_OK;
+}
 
 esp_err_t IOTModbus::modbus_start(int port_speed) {
     esp_err_t err = modbus_init(port_speed);
@@ -53,6 +60,7 @@ esp_err_t IOTModbus::modbus_init(int port_speed)
     comm.parity = MB_PARITY;
 
     void* master_handler = NULL;
+    ESP_LOGI(MODBUS_TAG, "Modbus starting with speed: %d", port_speed);
 
     esp_err_t err = mbc_master_init(MB_PORT_SERIAL_MASTER, &master_handler);
     SENSE_MB_CHECK((master_handler != NULL), ESP_ERR_INVALID_STATE,
@@ -64,23 +72,21 @@ esp_err_t IOTModbus::modbus_init(int port_speed)
     SENSE_MB_CHECK((err == ESP_OK), ESP_ERR_INVALID_STATE,
                             "mb controller setup fail, returns(0x%x).",
                             (uint32_t)err);
-    err = mbc_master_start();
-    SENSE_MB_CHECK((err == ESP_OK), ESP_ERR_INVALID_STATE,
-                            "mb controller start fail, returns(0x%x).",
-                            (uint32_t)err);
     // Set UART pin numbers
     err = uart_set_pin(MB_PORTNUM, CONFIG_MB_UART_TXD, CONFIG_MB_UART_RXD,
                                     CONFIG_MB_UART_RTS, UART_PIN_NO_CHANGE);
     SENSE_MB_CHECK((err == ESP_OK), ESP_ERR_INVALID_STATE,
             "mb serial set pin failure, uart_set_pin() returned (0x%x).", (uint32_t)err); 
+    err = mbc_master_start();
+    SENSE_MB_CHECK((err == ESP_OK), ESP_ERR_INVALID_STATE,
+                            "mb controller start fail, returns(0x%x).",
+                            (uint32_t)err);        
     // Set driver mode to Half Duplex
     err = uart_set_mode(MB_PORTNUM, UART_MODE_RS485_HALF_DUPLEX);
     SENSE_MB_CHECK((err == ESP_OK), ESP_ERR_INVALID_STATE,
             "mb serial set mode failure, uart_set_mode() returned (0x%x).", (uint32_t)err);
     vTaskDelay(5);
-    IOTGpio::reservePin(CONFIG_MB_UART_RXD, MODE_MODBUS);
-    IOTGpio::reservePin(CONFIG_MB_UART_TXD, MODE_MODBUS);
-    IOTGpio::reservePin(CONFIG_MB_UART_RTS, MODE_MODBUS);
+    ESP_LOGI(MODBUS_TAG, "Modbus master OK");
 
     return err;
 }
@@ -91,8 +97,7 @@ void IOTModbus::modbus_tcp_slave_task(void *pvParameters)
     char addr_str[128];
     int addr_family;
     int ip_protocol;
-    int clients[4];
-    int current_client = 0;
+    int signature = 0;
 
     struct sockaddr_in dest_addr;
     dest_addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -156,24 +161,31 @@ void IOTModbus::modbus_tcp_slave_task(void *pvParameters)
                 rx_buffer[len] = 0; // Null-terminate whatever we received and treat like a string
                 ESP_LOGI(MODBUS_TAG, "Received %d bytes from %s:", len, addr_str);
                 //ESP_LOGI(MODBUS_TAG, "%s", rx_buffer);
+                if (signature > 10000) {
+                    signature = 1;
+                } else {
+                    signature += 1;
+                }
 
-                flow_control_msg_t msg = {
+                flow_control_msg_t msg_out = {
                     .message = rx_buffer,
-                    .length = (uint16_t)len
+                    .length = (uint16_t)len,
+                    .signature = signature
                 };
-                if (xQueueSend(tcp2rtu_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) != pdTRUE) {
+                if (xQueueSend(tcp2rtu_queue, &msg_out, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) != pdTRUE) {
                     ESP_LOGE(MODBUS_TAG, "send flow control message failed or timeout");
                     //free(buffer);
                 }
+                flow_control_msg_t msg_in;
                 ESP_LOGI(MODBUS_TAG, "Flow message send");
-                vTaskDelay(50);
-                if (xQueueReceive(rtu2tcp_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) == pdTRUE) {
-                    ESP_LOGW(MODBUS_TAG, "Received packet from rtu, len: %d", msg.length);
-                        //ESP_LOGI(MODBUS_TAG, "==========  DUMP RTU IN START==========");
-                        //for (int i = 0; i<msg.length; i++) 
-                        //    ESP_LOGI(MODBUS_TAG, "=>: %d", *(msg.message + i));
-                        //ESP_LOGI(MODBUS_TAG, "==========  DUMP RTU IN END ==========");
-                    int err = send(sock, msg.message, msg.length, 0);
+                vTaskDelay(30);
+                if (xQueueReceive(rtu2tcp_queue, &msg_in, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) == pdTRUE) {
+                    ESP_LOGW(MODBUS_TAG, "Received packet from rtu, len: %d, signature expected: %d, signature received: %d", msg_in.length, msg_out.signature, msg_in.signature);
+                        ESP_LOGI(MODBUS_TAG, "==========  DUMP RTU IN START==========");
+                        for (int i = 0; i<msg_in.length; i++) 
+                            ESP_LOGI(MODBUS_TAG, "=>: %d", *(msg_in.message + i));
+                        ESP_LOGI(MODBUS_TAG, "==========  DUMP RTU IN END ==========");
+                    int err = send(sock, msg_in.message, msg_in.length, 0);
                     if (err < 0) {
                         ESP_LOGE(MODBUS_TAG, "Error occurred during sending tcp responce: errno %d", errno);
                         //break;
@@ -194,35 +206,35 @@ void IOTModbus::modbus_tcp_slave_task(void *pvParameters)
 
 void IOTModbus::eth2rtu_flow_control_task(void *args)
 {
-    flow_control_msg_t msg;
+    flow_control_msg_t msg_in;
     //uint32_t timeout = 0;
     int bytes;
     char tx_buffer[128];
     while (1) {
-        if (xQueueReceive(tcp2rtu_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) == pdTRUE) {
+        if (xQueueReceive(tcp2rtu_queue, &msg_in, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) == pdTRUE) {
             //Therefore, *(balance + 4) is a legitimate way of accessing the data at balance[4].
             ESP_LOGI(MODBUS_TAG, "Request for modbus received");
 
             //// rutine Modbus TCP
             //int _msg_id = (*(msg.message + MB_TCP_TID) << 8) + *(msg.message + MB_TCP_TID+1);
             //int protocol = (*(msg.message + MB_TCP_PID) << 8) + *(msg.message + MB_TCP_PID+1);
-            int start = (*(msg.message + MB_TCP_REGISTER_START) << 8) + *(msg.message + MB_TCP_REGISTER_START+1);
-            int len = (*(msg.message + MB_TCP_LEN) << 8) + *(msg.message + MB_TCP_LEN+1);
-            int regNumber = (*(msg.message + MB_TCP_REGISTER_NUMBER) << 8) + *(msg.message + MB_TCP_REGISTER_NUMBER+1);
-            int slaveId = *(msg.message + MB_TCP_UID);
-            int function = *(msg.message + MB_TCP_FUNC);
+            int start = (*(msg_in.message + MB_TCP_REGISTER_START) << 8) + *(msg_in.message + MB_TCP_REGISTER_START+1);
+            int len = (*(msg_in.message + MB_TCP_LEN) << 8) + *(msg_in.message + MB_TCP_LEN+1);
+            int regNumber = (*(msg_in.message + MB_TCP_REGISTER_NUMBER) << 8) + *(msg_in.message + MB_TCP_REGISTER_NUMBER+1);
+            int slaveId = *(msg_in.message + MB_TCP_UID);
+            int function = *(msg_in.message + MB_TCP_FUNC);
 
-            //ESP_LOGI(TAG, "==========  Modbus message ==========");
-            //ESP_LOGI(TAG, "_msg_id: %d", _msg_id);
-            //ESP_LOGI(TAG, "protocol: %d", protocol);
-            //ESP_LOGI(TAG, "start: %d", start);
-            //ESP_LOGI(TAG, "regNumber: %d", regNumber);
-            //ESP_LOGI(TAG, "len: %d", len);
-            //ESP_LOGI(TAG, "Slave ID: %d", slaveId);
-            //ESP_LOGI(TAG, "Function: %d", function);
+            ESP_LOGI(MODBUS_TAG, "==========  Modbus message ==========");
+            //ESP_LOGI(MODBUS_TAG, "_msg_id: %d", _msg_id);
+            //ESP_LOGI(MODBUS_TAG, "protocol: %d", protocol);
+            ESP_LOGI(MODBUS_TAG, "start: %d", start);
+            ESP_LOGI(MODBUS_TAG, "regNumber: %d", regNumber);
+            ESP_LOGI(MODBUS_TAG, "len: %d", len);
+            ESP_LOGI(MODBUS_TAG, "Slave ID: %d", slaveId);
+            ESP_LOGI(MODBUS_TAG, "Function: %d", function);
    
-            tx_buffer[0] = *(msg.message + MB_TCP_TID);
-            tx_buffer[1] = *(msg.message + MB_TCP_TID + 1);
+            tx_buffer[0] = *(msg_in.message + MB_TCP_TID);
+            tx_buffer[1] = *(msg_in.message + MB_TCP_TID + 1);
             
             tx_buffer[2] = 0;
             tx_buffer[3] = 0;                    
@@ -293,7 +305,8 @@ void IOTModbus::eth2rtu_flow_control_task(void *args)
             // return data to TCP socket
             flow_control_msg_t msg = {
                 .message = tx_buffer,
-                .length = length
+                .length = length,
+                .signature = msg_in.signature
             };
             if (xQueueSend(rtu2tcp_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) != pdTRUE) {
                 ESP_LOGE(MODBUS_TAG, "send flow control message failed or timeout");

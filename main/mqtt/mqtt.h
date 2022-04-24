@@ -27,21 +27,20 @@ class IOTMqtt {
         static mqtt_config_t mqtt_module_config;
         static char *mqtt2gpio_topic;
         static char *mqtt2curtains_topic;
-        static xQueueHandle gpio2mqtt_queue;
-        static xQueueHandle mqtt2gpio_queue;
         static TaskHandle_t health_status_task_handle;
         static mqtt_config_t init_with_default_config();
         static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event);
         static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, esp_mqtt_event_handle_t event_data);
-        static void gpio2mqtt_task();
-        static esp_err_t subscribe_to_gpio();
         static void health_status_task(void *pvParameter);
         static esp_err_t start_mqtt_client();
         static void decode_mqtt_message(esp_mqtt_event_handle_t event);
     public:
         IOTMqtt(cJSON *curtains);
+        static void (*gpio_command_cb)(int, int);
+        static void (*curtains_cb_manager)(int, int, int, int);
         static esp_err_t mqtt_json_init(cJSON *gpio);
         static cJSON *get_mqtt_config();
+        static void gpio_update_state_cb(int pin, int state);
         ~IOTMqtt(void);
 };
 

@@ -12,12 +12,13 @@ extern "C"
 }
 #endif
 #include "config/config.h"
-#include "gpio/gpio.h"
 #include "mqtt/mqtt.h"
 #include "iot_stepper_a4988.h"
 #include "time_utils.h"
 
 static const char *TAG = "REST Handler";
+
+void (*gpio_command_cb)(int, int) = NULL;
 
 static char *parse_uri(const char *uri)
 {
@@ -200,7 +201,8 @@ esp_err_t gpio_control_post_handler(httpd_req_t *req, char *buf)
         cJSON *pins = cJSON_GetObjectItem(gpio, "config");
         char *string = cJSON_Print(pins);
         ESP_LOGD(TAG, "Got pins: %s", string);
-        status = IOTGpio::gpio_json_init(pins, true);
+        status = ESP_OK;
+        //status = IOTGpio::gpio_json_init(pins, true);
         ESP_LOGD(TAG, "JSON processed OK with status %d", status);
         if (status == ESP_OK)
         {
@@ -254,11 +256,11 @@ esp_err_t gpio_control_state_get_handler(httpd_req_t *req)
     cJSON *res;
     if (pin != -1)
     {
-        res = IOTGpio::get_json_pin_state(pin);
+        res = 0;//IOTGpio::get_json_pin_state(pin);
     }
     else
     {
-        res = IOTGpio::getGpioState();
+        res = 0;//IOTGpio::getGpioState();
     }
     const char *resp_body = cJSON_Print(res);
     httpd_resp_sendstr(req, resp_body);
@@ -272,8 +274,12 @@ esp_err_t gpio_control_state_post_handler(httpd_req_t *req, char *buf)
     cJSON *json_body = cJSON_Parse(buf);
     int pin = cJSON_GetObjectItem(json_body, "pin")->valueint;
     int state = cJSON_GetObjectItem(json_body, "state")->valueint;
+    if (gpio_command_cb != NULL) {
+            ESP_LOGI(TAG, "MQTT2GPIO_EVENT CB, pinn=%d, state=%d", pin, state);
+            gpio_command_cb(pin, state);
+    }
     cJSON *res = cJSON_CreateObject();
-    cJSON_AddNumberToObject(res, "result", IOTGpio::setPinState(pin, state));
+    //TODO cJSON_AddNumberToObject(res, "result", IOTGpio::setPinState(pin, state));
     const char *resp_body = cJSON_Print(res);
     httpd_resp_sendstr(req, resp_body);
     free((void *)resp_body);
@@ -288,7 +294,7 @@ esp_err_t gpio_control_level_post_handler(httpd_req_t *req, char *buf)
     int pin = cJSON_GetObjectItem(json_body, "pin")->valueint;
     int level = cJSON_GetObjectItem(json_body, "level")->valueint;
     cJSON *res = cJSON_CreateObject();
-    cJSON_AddNumberToObject(res, "result", IOTGpio::setPinState(pin, level));
+    //TODO cJSON_AddNumberToObject(res, "result", IOTGpio::setPinState(pin, level));
     const char *resp_body = cJSON_Print(res);
     httpd_resp_sendstr(req, resp_body);
     free((void *)resp_body);

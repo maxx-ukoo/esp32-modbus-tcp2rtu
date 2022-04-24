@@ -46,6 +46,7 @@
 typedef struct {
     char* message;
     uint16_t length;
+    int signature;
 } flow_control_msg_t;
 
 esp_err_t modbus_start(int port_speed);

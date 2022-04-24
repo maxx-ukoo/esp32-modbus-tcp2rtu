@@ -44,14 +44,11 @@ public:
      *         ESP_FAIL if error occured
      */
     static cJSON *get_curtains_config();
-
     static esp_err_t step(int curtain, int direction, int steps);
-
     static esp_err_t calibrate(int curtain);
-
     static esp_err_t move(int curtain, int position);
-
     static esp_err_t curtains_json_init(cJSON *curtains);
+    static esp_err_t command(int curtain, int command, int param1, int param2);
     
     /**
      * @brief Destructor function of IOTCurtains object
